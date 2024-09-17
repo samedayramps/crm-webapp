@@ -2,16 +2,22 @@ import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import { Customer } from '@/models';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   await dbConnect();
 
   try {
-    const customer = await Customer.findById(params.id);
+    const customer = await Customer.findById(params.id).select('firstName lastName email phoneNumber address mobilityAids');
+
     if (!customer) {
       return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
     }
+
     return NextResponse.json(customer);
   } catch (error) {
+    console.error('Error fetching customer:', error);
     return NextResponse.json({ error: 'Failed to fetch customer' }, { status: 500 });
   }
 }

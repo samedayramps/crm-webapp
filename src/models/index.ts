@@ -98,3 +98,6 @@ export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('C
 export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
 export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
 export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
+
+// Remove this line:
+// export { Customer } from './Customer';
