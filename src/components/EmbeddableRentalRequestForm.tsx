@@ -27,7 +27,7 @@ const EmbeddableRentalRequestForm: React.FC = () => {
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const response = await fetch('https://your-api-endpoint.com/api/rental-requests', {
+      const response = await fetch('https://app.samedayramps.com/api/rental-requests', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -13,12 +13,12 @@ export default function handler(req: NextApiRequest, res: NextApiResponse) {
       document.head.appendChild(script);
 
       script = document.createElement('script');
-      script.src = 'https://your-domain.com/embeddable-form.js';
+      script.src = 'https://app.samedayramps.com/embeddable-form.js';
       document.head.appendChild(script);
 
       var link = document.createElement('link');
       link.rel = 'stylesheet';
-      link.href = 'https://your-domain.com/embeddable-form.css';
+      link.href = 'https://app.samedayramps.com/embeddable-form.css';
       document.head.appendChild(link);
 
       var div = document.createElement('div');
