@@ -3775,48 +3775,6 @@ export async function POST(request: Request) {
 }
 ```
 
-# src/app/api/rental-requests/route.ts
-
-```ts
-// src/app/api/rental-requests/route.ts
-
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest } from '@/models';
-import { ApiResponse, RentalRequest as RentalRequestType } from '@/types'; // Add this import
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const rentalRequest = await RentalRequest.create(data);
-    const response: ApiResponse<RentalRequestType> = { data: rentalRequest };
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Error creating rental request:', error);
-    const response: ApiResponse<never> = { error: 'Failed to create rental request' };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-
-export async function GET() {
-  await dbConnect();
-
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error in GET /api/rental-requests:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch rental requests',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-```
-
 # src/app/api/register/route.ts
 
 ```ts
@@ -3855,52 +3813,6 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Registration error:', error);
     return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    console.error('GOOGLE_MAPS_API_KEY is not set');
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-  }
-
-  try {
-    const response = await client.distancematrix({
-      params: {
-        origins: [origin],
-        destinations: [destination],
-        key: apiKey,
-      },
-    });
-
-    if (response.data.rows[0].elements[0].status === 'OK') {
-      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-      return NextResponse.json({ distance });
-    } else {
-      console.error('Google Maps API error:', response.data);
-      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
-    }
-  } catch (error) {
-    console.error('Error calculating distance:', error);
-    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
   }
 }
 ```
@@ -3959,6 +3871,94 @@ export async function POST(request: Request) {
 }
 ```
 
+# src/app/api/rental-requests/route.ts
+
+```ts
+// src/app/api/rental-requests/route.ts
+
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest } from '@/models';
+import { ApiResponse, RentalRequest as RentalRequestType } from '@/types'; // Add this import
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const rentalRequest = await RentalRequest.create(data);
+    const response: ApiResponse<RentalRequestType> = { data: rentalRequest };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating rental request:', error);
+    const response: ApiResponse<never> = { error: 'Failed to create rental request' };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch rental requests',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.error('GOOGLE_MAPS_API_KEY is not set');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    const response = await client.distancematrix({
+      params: {
+        origins: [origin],
+        destinations: [destination],
+        key: apiKey,
+      },
+    });
+
+    if (response.data.rows[0].elements[0].status === 'OK') {
+      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+      return NextResponse.json({ distance });
+    } else {
+      console.error('Google Maps API error:', response.data);
+      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Error calculating distance:', error);
+    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
+  }
+}
+```
+
 # src/app/api/customers/route.ts
 
 ```ts
@@ -4005,57 +4005,6 @@ export async function GET() {
       error: 'Failed to fetch customers',
     };
     return NextResponse.json(response, { status: 500 });
-  }
-}
-```
-
-# src/app/api/rental-requests/[id]/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest } from '@/models';
-
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const rentalRequest = await RentalRequest.findById(params.id);
-    if (!rentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json(rentalRequest);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch rental request' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const rentalRequest = await RentalRequest.findByIdAndDelete(params.id);
-    if (!rentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json({ message: 'Rental request deleted successfully' });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete rental request' }, { status: 500 });
-  }
-}
-
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const updatedRentalRequest = await RentalRequest.findByIdAndUpdate(params.id, data, { new: true });
-    if (!updatedRentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json(updatedRentalRequest);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update rental request' }, { status: 500 });
   }
 }
 ```
@@ -4166,6 +4115,57 @@ export async function POST(request: Request) {
       error: `Failed to create quote: ${errorMessage}`,
     };
     return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/rental-requests/[id]/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest } from '@/models';
+
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const rentalRequest = await RentalRequest.findById(params.id);
+    if (!rentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json(rentalRequest);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch rental request' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const rentalRequest = await RentalRequest.findByIdAndDelete(params.id);
+    if (!rentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json({ message: 'Rental request deleted successfully' });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to delete rental request' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const updatedRentalRequest = await RentalRequest.findByIdAndUpdate(params.id, data, { new: true });
+    if (!updatedRentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json(updatedRentalRequest);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update rental request' }, { status: 500 });
   }
 }
 ```
@@ -4305,6 +4305,18 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
+// Check for NEXTAUTH_SECRET
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error("Warning: NEXTAUTH_SECRET is not set");
+}
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Logging for debugging
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('NEXTAUTH_SECRET:', process.env.NEXTAUTH_SECRET ? 'is set' : 'is not set');
+console.log('Is Production:', isProduction);
+
 export const authOptions: NextAuthOptions = {
   providers: [
     CredentialsProvider({
@@ -4315,17 +4327,29 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
+          throw new Error("Missing username or password");
+        }
+
+        try {
+          const client = await clientPromise;
+          const db = client.db();
+          const user = await db.collection('users').findOne({ username: credentials.username });
+
+          if (!user) {
+            throw new Error("User not found");
+          }
+
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+
+          if (!isPasswordValid) {
+            throw new Error("Invalid password");
+          }
+
+          return { id: user._id.toString(), name: user.username, email: user.email };
+        } catch (error) {
+          console.error("Authentication error:", error);
           return null;
         }
-
-        const client = await clientPromise;
-        const db = client.db();
-        const user = await db.collection('users').findOne({ username: credentials.username });
-
-        if (user && await bcrypt.compare(credentials.password, user.password)) {
-          return { id: user._id.toString(), name: user.username, email: user.email };
-        }
-        return null;
       }
     })
   ],
@@ -4346,6 +4370,17 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
   },
+  secret: process.env.NEXTAUTH_SECRET || (isProduction ? undefined : 'DEVELOPMENT_SECRET'),
+  debug: !isProduction,
 };
+
+if (isProduction) {
+  console.log("Running in production mode");
+  if (!process.env.NEXTAUTH_SECRET) {
+    console.error("Error: NEXTAUTH_SECRET must be set in production");
+  }
+} else {
+  console.log("Running in development mode");
+}
 ```
 

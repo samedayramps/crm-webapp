@@ -3,14 +3,12 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
-// Check for NEXTAUTH_SECRET
 if (!process.env.NEXTAUTH_SECRET) {
   console.error("Warning: NEXTAUTH_SECRET is not set");
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Logging for debugging
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('NEXTAUTH_SECRET:', process.env.NEXTAUTH_SECRET ? 'is set' : 'is not set');
 console.log('Is Production:', isProduction);
@@ -67,6 +65,10 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET || (isProduction ? undefined : 'DEVELOPMENT_SECRET'),
   debug: !isProduction,
