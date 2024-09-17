@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 
 interface Customer {
   _id: string;
@@ -8,6 +9,8 @@ interface Customer {
   lastName: string;
   email: string;
   phoneNumber: string;
+  address: string;
+  mobilityAids: string[];
 }
 
 interface CustomerDetailsProps {
@@ -73,7 +76,25 @@ const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
             <dt className="text-sm font-medium text-gray-500">Phone number</dt>
             <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{customer.phoneNumber}</dd>
           </div>
+          <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+            <dt className="text-sm font-medium text-gray-500">Address</dt>
+            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{customer.address}</dd>
+          </div>
+          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
+            <dt className="text-sm font-medium text-gray-500">Mobility Aids</dt>
+            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
+              {customer.mobilityAids.join(', ') || 'None'}
+            </dd>
+          </div>
         </dl>
+      </div>
+      <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
+        <Link 
+          href={`/quotes/new?customerId=${customer._id}`}
+          className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+        >
+          Create Quote
+        </Link>
       </div>
     </div>
   );

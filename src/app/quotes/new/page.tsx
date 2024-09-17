@@ -5,8 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuoteContext, QuoteProvider } from '@/contexts/QuoteContext';
 import CustomerSearch from '@/components/CustomerSearch';
 import CustomerCard from '@/components/CustomerCard';
-import RampConfiguration from '@/components/RampConfiguration';
-import PricingComponent from '@/components/PricingComponent';
+import RampConfigurationV2 from '@/components/RampConfiguration';
 
 interface Customer {
   _id: string;
@@ -18,11 +17,19 @@ interface Customer {
   mobilityAids: string[];
 }
 
+interface RampComponent {
+  id: string;
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 const NewQuotePageContent: React.FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { addQuote } = useQuoteContext();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
 
   // Check if a customer ID was provided in the URL
   React.useEffect(() => {
@@ -50,29 +57,47 @@ const NewQuotePageContent: React.FC = () => {
     setSelectedCustomer(customer);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleRampConfigurationChange = (components: RampComponent[]) => {
+    setRampComponents(components);
+  };
+
+  const handleCreateQuote = async () => {
     if (!selectedCustomer) {
       alert('Please select a customer');
       return;
     }
 
     try {
-      await addQuote({
-        customer: {
-          firstName: selectedCustomer.firstName,
-          lastName: selectedCustomer.lastName,
-          email: selectedCustomer.email,
-          phoneNumber: selectedCustomer.phoneNumber,
-        },
-        totalPrice: 0, // TODO: Calculate this based on ramp configuration and pricing
-        components: [], // TODO: Add this based on ramp configuration
+      const quoteData = {
+        customer: selectedCustomer._id,
+        totalPrice: 0, // This will be calculated later
+        components: rampComponents,
         status: 'DRAFT',
         createdAt: new Date().toISOString(),
         sentAt: null,
         signedAt: null,
         paymentStatus: 'UNPAID',
+        // Add a placeholder rentalRequest for now
+        rentalRequest: '000000000000000000000000', // Placeholder ObjectId
+      };
+
+      console.log('Sending quote data:', quoteData);
+
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(quoteData),
       });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || 'Failed to create quote');
+      }
+
+      const newQuote = await response.json();
+      await addQuote(newQuote);
       router.push('/quotes');
     } catch (error) {
       console.error('Failed to create quote:', error);
@@ -83,27 +108,18 @@ const NewQuotePageContent: React.FC = () => {
   return (
     <div className="max-w-2xl mx-auto py-8">
       <h1 className="text-3xl font-bold mb-6">Create New Quote</h1>
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-4">
         {!selectedCustomer && <CustomerSearch onSelectCustomer={handleSelectCustomer} />}
-        {selectedCustomer && (
-          <CustomerCard 
-            customer={{
-              _id: selectedCustomer._id,
-              firstName: selectedCustomer.firstName,
-              lastName: selectedCustomer.lastName,
-              email: selectedCustomer.email,
-              phoneNumber: selectedCustomer.phoneNumber,
-              address: selectedCustomer.address,
-              mobilityAids: selectedCustomer.mobilityAids
-            }} 
-          />
-        )}
-        <RampConfiguration />
-        <PricingComponent />
-        <button type="submit" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+        {selectedCustomer && <CustomerCard customer={selectedCustomer} />}
+        <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
+        <button 
+          type="button"
+          onClick={handleCreateQuote}
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
           Create Quote
         </button>
-      </form>
+      </div>
     </div>
   );
 };

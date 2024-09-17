@@ -36,9 +36,14 @@ const RentalRequestSchema = new mongoose.Schema({
 
 const QuoteSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-  rentalRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'RentalRequest', required: true },
+  rentalRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'RentalRequest' },
   totalPrice: { type: Number, required: true },
-  components: { type: Object, required: true },
+  components: [{ 
+    id: String,
+    name: String,
+    quantity: Number,
+    price: Number
+  }],
   status: { type: String, default: 'DRAFT' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
