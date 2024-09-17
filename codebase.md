@@ -1558,10 +1558,14 @@ export default Layout;
 # src/components/Header.tsx
 
 ```tsx
-import React from 'react';
+"use client";
+
+import React, { useState } from 'react';
 import Link from 'next/link';
 
 const Header: React.FC = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
   return (
     <header className="bg-white shadow-md">
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -1572,23 +1576,58 @@ const Header: React.FC = () => {
                 Your App Name
               </Link>
             </div>
-            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-              <Link href="/quotes" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Quotes
-              </Link>
-              <Link href="/customers" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Customers
-              </Link>
-              <Link href="/settings" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
-                Settings
-              </Link>
-            </div>
+          </div>
+          <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+            <NavLink href="/quotes">Quotes</NavLink>
+            <NavLink href="/customers">Customers</NavLink>
+            <NavLink href="/rental-requests">Rental Requests</NavLink>
+            <NavLink href="/settings">Settings</NavLink>
+          </div>
+          <div className="-mr-2 flex items-center sm:hidden">
+            <button
+              onClick={() => setIsMenuOpen(!isMenuOpen)}
+              className="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-gray-500 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+            >
+              <span className="sr-only">Open main menu</span>
+              {isMenuOpen ? (
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              ) : (
+                <svg className="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+              )}
+            </button>
           </div>
         </div>
       </nav>
+
+      {isMenuOpen && (
+        <div className="sm:hidden">
+          <div className="pt-2 pb-3 space-y-1">
+            <MobileNavLink href="/quotes">Quotes</MobileNavLink>
+            <MobileNavLink href="/customers">Customers</MobileNavLink>
+            <MobileNavLink href="/rental-requests">Rental Requests</MobileNavLink>
+            <MobileNavLink href="/settings">Settings</MobileNavLink>
+          </div>
+        </div>
+      )}
     </header>
   );
 };
+
+const NavLink: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
+  <Link href={href} className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+    {children}
+  </Link>
+);
+
+const MobileNavLink: React.FC<{ href: string; children: React.ReactNode }> = ({ href, children }) => (
+  <Link href={href} className="block px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50">
+    {children}
+  </Link>
+);
 
 export default Header;
 ```
@@ -2378,123 +2417,109 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, vari
 );
 ```
 
-# src/app/settings/page.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import PricingVariables from '@/components/PricingVariables';
-
-const SettingsPage: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <PricingVariables />
-    </div>
-  );
-};
-
-export default SettingsPage;
-```
-
 # src/components/RentalRequestForm/RentalRequestForm.tsx
 
 ```tsx
 'use client';
 
-import React from 'react';
-import { useForm } from '@/hooks/useForm';
-import { api } from '@/utils/api';
-import { RentalRequest } from '@/types';
+import React, { useState } from 'react';
 import { ContactInfoForm } from './ContactInfoForm';
 import { RampDetailsForm } from './RampDetailsForm';
-import { ConfirmationPage } from './ConfirmationPage';
+import { RentalRequest } from '@/types';
 
-const initialState: Omit<RentalRequest, '_id' | 'createdAt'> = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  knowRampLength: 'no',
-  estimatedRampLength: '',
-  knowRentalDuration: 'no',
-  estimatedRentalDuration: '',
-  installationTimeframe: '',
-  mobilityAids: [],
-  installAddress: '',
+type FormErrors = {
+  [K in keyof Omit<RentalRequest, '_id' | 'createdAt'>]?: string;
 };
 
-const validateForm = (values: Omit<RentalRequest, '_id' | 'createdAt'>) => {
-  const errors: { [key: string]: string } = {};
-  if (!values.firstName) errors.firstName = 'First name is required';
-  if (!values.lastName) errors.lastName = 'Last name is required';
-  if (!values.email) errors.email = 'Email is required';
-  // Add more validation as needed
-  return errors;
-};
+type ChangeEventOrCustomChange = 
+  | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  | { name: string; value: string | string[] };
 
-const RentalRequestForm: React.FC = () => {
-  const [page, setPage] = React.useState(1);
-  const { values, errors, isSubmitting, handleChange, handleSubmit, setValues } = useForm(initialState, validateForm);
+interface RentalRequestFormProps {
+  onSubmit: (data: Omit<RentalRequest, '_id' | 'createdAt'>) => Promise<void>;
+}
+
+const RentalRequestForm: React.FC<RentalRequestFormProps> = ({ onSubmit }) => {
+  const [page, setPage] = useState(1);
+  const [values, setValues] = useState<Omit<RentalRequest, '_id' | 'createdAt'>>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    knowRampLength: '',
+    estimatedRampLength: '',
+    knowRentalDuration: '',
+    estimatedRentalDuration: '',
+    installationTimeframe: '',
+    mobilityAids: [],
+    installAddress: '',
+  });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleChange = (e: ChangeEventOrCustomChange) => {
+    const { name, value } = 'target' in e ? e.target : e;
+    setValues(prev => ({ ...prev, [name]: value }));
+  };
 
   const handleNextPage = () => {
-    if (Object.keys(validateForm(values)).length === 0) {
-      setPage(prev => prev + 1);
+    if (validatePage(1)) {
+      setPage(2);
     }
   };
 
   const handlePrevPage = () => {
-    setPage(prev => prev - 1);
+    setPage(1);
   };
 
-  const onSubmit = async (formData: Omit<RentalRequest, '_id' | 'createdAt'>) => {
-    const response = await api.post<RentalRequest>('/rental-requests', formData);
-    if (response.data) {
-      setPage(3); // Move to confirmation page
-    } else if (response.error) {
-      console.error('Error submitting form:', response.error);
-      // Handle error (e.g., show error message to user)
+  const validatePage = (pageNum: number): boolean => {
+    const newErrors: FormErrors = {};
+    if (pageNum === 1) {
+      if (!values.firstName) newErrors.firstName = 'First name is required';
+      if (!values.lastName) newErrors.lastName = 'Last name is required';
+      if (!values.email) newErrors.email = 'Email is required';
+      if (!values.phone) newErrors.phone = 'Phone number is required';
+    } else if (pageNum === 2) {
+      // Add validation for page 2 fields here
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (validatePage(2)) {
+      setIsSubmitting(true);
+      try {
+        await onSubmit(values);
+        // Handle successful submission (e.g., show success message, redirect)
+      } catch (error) {
+        console.error('Error submitting form:', error);
+        // Handle error (e.g., show error message)
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const handleStartOver = () => {
-    setPage(1);
-    setValues(initialState);
-  };
-
   return (
-    <div className="max-w-md mx-auto mt-10">
-      {page < 3 ? (
-        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(onSubmit); }} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-          <div className="text-gray-800 dark:text-gray-100">
-            {page === 1 && (
-              <ContactInfoForm
-                values={values}
-                errors={errors}
-                onChange={handleChange}
-                onNextPage={handleNextPage}
-              />
-            )}
-            {page === 2 && (
-              <RampDetailsForm
-                values={values}
-                errors={errors}
-                onChange={handleChange}
-                onPrevPage={handlePrevPage}
-                onSubmit={() => handleSubmit(onSubmit)}
-                isSubmitting={isSubmitting}
-              />
-            )}
-          </div>
-          {errors.submit && (
-            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-              Error: {errors.submit}
-            </div>
-          )}
-        </form>
-      ) : (
-        <ConfirmationPage onStartOver={handleStartOver} />
+    <div>
+      {page === 1 && (
+        <ContactInfoForm
+          formData={values}
+          errors={errors}
+          onChange={handleChange}
+          onNextPage={handleNextPage}
+        />
+      )}
+      {page === 2 && (
+        <RampDetailsForm
+          formData={values}
+          errors={errors}
+          onChange={handleChange}
+          onPrevPage={handlePrevPage}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+        />
       )}
     </div>
   );
@@ -2514,11 +2539,26 @@ import { Select } from '@/components/ui/Select';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Button } from '@/components/ui/Button';
 import { AddressField } from '@/components/ui/AddressField';
-import { RentalRequest } from '@/types';
 
 interface RampDetailsFormProps {
-  values: Partial<RentalRequest>;
-  errors: { [key: string]: string };
+  formData: {
+    knowRampLength: string;
+    estimatedRampLength: string;
+    knowRentalDuration: string;
+    estimatedRentalDuration: string;
+    installationTimeframe: string;
+    mobilityAids: string[];
+    installAddress: string;
+  };
+  errors: {
+    knowRampLength?: string;
+    estimatedRampLength?: string;
+    knowRentalDuration?: string;
+    estimatedRentalDuration?: string;
+    installationTimeframe?: string;
+    mobilityAids?: string;
+    installAddress?: string;
+  };
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] }) => void;
   onPrevPage: () => void;
   onSubmit: () => void;
@@ -2526,7 +2566,7 @@ interface RampDetailsFormProps {
 }
 
 export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
-  values,
+  formData,
   errors,
   onChange,
   onPrevPage,
@@ -2535,8 +2575,8 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
 }) => {
   const handleCheckboxChange = (aid: string) => (checked: boolean) => {
     const newAids = checked
-      ? [...(values.mobilityAids || []), aid]
-      : (values.mobilityAids || []).filter((item) => item !== aid);
+      ? [...(formData.mobilityAids || []), aid]
+      : (formData.mobilityAids || []).filter((item) => item !== aid);
     onChange({ name: 'mobilityAids', value: newAids });
   };
 
@@ -2552,7 +2592,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRampLength"
                 value="yes"
-                checked={values.knowRampLength === 'yes'}
+                checked={formData.knowRampLength === 'yes'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -2563,7 +2603,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRampLength"
                 value="no"
-                checked={values.knowRampLength === 'no'}
+                checked={formData.knowRampLength === 'no'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -2571,14 +2611,14 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             </label>
           </div>
         </div>
-        {values.knowRampLength === 'yes' && (
+        {formData.knowRampLength === 'yes' && (
           <div>
             <label htmlFor="estimatedRampLength" className="block text-sm font-medium">Estimated ramp length (in feet)</label>
             <Input
               id="estimatedRampLength"
               name="estimatedRampLength"
               type="number"
-              value={values.estimatedRampLength || ''}
+              value={formData.estimatedRampLength || ''}
               onChange={onChange}
               error={errors.estimatedRampLength}
               className="mt-1"
@@ -2594,7 +2634,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRentalDuration"
                 value="yes"
-                checked={values.knowRentalDuration === 'yes'}
+                checked={formData.knowRentalDuration === 'yes'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -2605,7 +2645,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRentalDuration"
                 value="no"
-                checked={values.knowRentalDuration === 'no'}
+                checked={formData.knowRentalDuration === 'no'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -2613,14 +2653,14 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             </label>
           </div>
         </div>
-        {values.knowRentalDuration === 'yes' && (
+        {formData.knowRentalDuration === 'yes' && (
           <div>
             <label htmlFor="estimatedRentalDuration" className="block text-sm font-medium">Estimated rental duration (in days)</label>
             <Input
               id="estimatedRentalDuration"
               name="estimatedRentalDuration"
               type="number"
-              value={values.estimatedRentalDuration || ''}
+              value={formData.estimatedRentalDuration || ''}
               onChange={onChange}
               error={errors.estimatedRentalDuration}
               className="mt-1"
@@ -2633,7 +2673,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
           <Select
             id="installationTimeframe"
             name="installationTimeframe"
-            value={values.installationTimeframe || ''}
+            value={formData.installationTimeframe || ''}
             onChange={onChange}
             error={errors.installationTimeframe}
           >
@@ -2651,7 +2691,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             {['Wheelchair', 'Motorized scooter', 'Walker'].map((aid) => (
               <label key={aid} className="inline-flex items-center">
                 <Checkbox
-                  checked={values.mobilityAids?.includes(aid) || false}
+                  checked={formData.mobilityAids?.includes(aid) || false}
                   onCheckedChange={handleCheckboxChange(aid)}
                 />
                 <span className="ml-2 text-sm">{aid}</span>
@@ -2660,7 +2700,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
           </div>
         </div>
         <AddressField
-          value={values.installAddress || ''}
+          value={formData.installAddress || ''}
           onChange={(value) => onChange({ target: { name: 'installAddress', value } } as React.ChangeEvent<HTMLInputElement>)}
           error={errors.installAddress}
           label="Installation Address"
@@ -2704,6 +2744,11 @@ interface RentalRequestFormData {
   installAddress: string;
 }
 
+// Define a new type for errors where all values are strings
+type FormErrors = {
+  [K in keyof RentalRequestFormData]?: string;
+};
+
 interface EditRentalRequestFormProps {
   initialData: IRentalRequest;
   onSubmit: (data: IRentalRequest) => Promise<void>;
@@ -2728,15 +2773,18 @@ export const EditRentalRequestForm: React.FC<EditRentalRequestFormProps> = ({
     mobilityAids: initialData.mobilityAids,
     installAddress: initialData.installAddress,
   });
-  const [errors, setErrors] = useState<Partial<RentalRequestFormData>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleInputChange = (name: string, value: string | string[]) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] }
+  ) => {
+    const { name, value } = 'target' in e ? e.target : e;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<RentalRequestFormData> = {};
+    const newErrors: FormErrors = {};
     // Implement form validation logic here
     // For example:
     if (!formData.firstName) newErrors.firstName = 'First name is required';
@@ -2800,20 +2848,29 @@ import React from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormattedPhoneInput } from '@/components/ui/FormattedPhoneInput';
-import { RentalRequest } from '@/types';
 
 interface ContactInfoFormProps {
-  values: Partial<RentalRequest>;
-  errors: { [key: string]: string };
+  formData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  };
+  errors: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+  };
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onNextPage: () => void;
 }
 
 export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
-  values,
+  formData,
   errors,
   onChange,
-  onNextPage,
+  onNextPage
 }) => {
   return (
     <div className="space-y-6 text-gray-800 dark:text-gray-100">
@@ -2824,7 +2881,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <Input
             id="firstName"
             name="firstName"
-            value={values.firstName || ''}
+            value={formData.firstName || ''}
             onChange={onChange}
             error={errors.firstName}
             className="mt-1"
@@ -2835,7 +2892,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <Input
             id="lastName"
             name="lastName"
-            value={values.lastName || ''}
+            value={formData.lastName || ''}
             onChange={onChange}
             error={errors.lastName}
             className="mt-1"
@@ -2847,7 +2904,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
             id="email"
             name="email"
             type="email"
-            value={values.email || ''}
+            value={formData.email || ''}
             onChange={onChange}
             error={errors.email}
             className="mt-1"
@@ -2856,7 +2913,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
         <div>
           <label htmlFor="phone" className="block text-sm font-medium">Phone Number</label>
           <FormattedPhoneInput
-            value={values.phone || ''}
+            value={formData.phone || ''}
             onChange={(value) => onChange({ target: { name: 'phone', value } } as React.ChangeEvent<HTMLInputElement>)}
             error={errors.phone}
             className="mt-1"
@@ -2900,6 +2957,26 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
     </div>
   );
 };
+```
+
+# src/app/settings/page.tsx
+
+```tsx
+'use client';
+
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
+
+const SettingsPage: React.FC = () => {
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
+    </div>
+  );
+};
+
+export default SettingsPage;
 ```
 
 # src/app/rental-requests/page.tsx
@@ -2978,6 +3055,31 @@ const RentalRequestsPage = () => {
 };
 
 export default RentalRequestsPage;
+```
+
+# src/app/quotes/page.tsx
+
+```tsx
+// src/app/quotes/page.tsx
+
+import React from 'react';
+import QuoteLayout from '@/components/QuoteLayout';
+import QuoteList from '@/components/QuoteList';
+import CreateQuoteButton from '@/components/CreateQuoteButton';
+
+export default function Quotes() {
+  return (
+    <QuoteLayout>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Quotes</h1>
+          <CreateQuoteButton />
+        </div>
+        <QuoteList />
+      </div>
+    </QuoteLayout>
+  );
+}
 ```
 
 # src/app/login/page.tsx
@@ -3091,30 +3193,13 @@ export default function LoginPage() {
 }
 ```
 
-# src/app/quotes/page.tsx
+# src/app/fonts/GeistVF.woff
 
-```tsx
-// src/app/quotes/page.tsx
+This is a binary file of the type: Binary
 
-import React from 'react';
-import QuoteLayout from '@/components/QuoteLayout';
-import QuoteList from '@/components/QuoteList';
-import CreateQuoteButton from '@/components/CreateQuoteButton';
+# src/app/fonts/GeistMonoVF.woff
 
-export default function Quotes() {
-  return (
-    <QuoteLayout>
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Quotes</h1>
-          <CreateQuoteButton />
-        </div>
-        <QuoteList />
-      </div>
-    </QuoteLayout>
-  );
-}
-```
+This is a binary file of the type: Binary
 
 # src/app/customers/page.tsx
 
@@ -3132,25 +3217,43 @@ export default function Customers() {
 }
 ```
 
-# src/app/fonts/GeistVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
-
 # src/app/rental-requests/new/page.tsx
 
 ```tsx
+'use client'; // Add this line to make it a Client Component
+
 import React from 'react';
 import RentalRequestForm from '@/components/RentalRequestForm/RentalRequestForm';
+import { RentalRequest } from '@/types';
 
 export default function NewRentalRequest() {
+  const handleSubmit = async (data: Omit<RentalRequest, '_id' | 'createdAt'>) => {
+    try {
+      const response = await fetch('/api/rental-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit rental request');
+      }
+
+      const result = await response.json();
+      console.log('Rental request submitted:', result);
+      // You can add a success message or redirect here
+    } catch (error) {
+      console.error('Error submitting rental request:', error);
+      // You can add an error message here
+    }
+  };
+
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">New Rental Request</h1>
-      <RentalRequestForm />
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-4">New Rental Request</h1>
+      <RentalRequestForm onSubmit={handleSubmit} />
     </div>
   );
 }
@@ -3680,7 +3783,7 @@ export async function POST(request: Request) {
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest } from '@/models';
-import { ApiResponse, RentalRequest as RentalRequestType } from '@/types';
+import { ApiResponse, RentalRequest as RentalRequestType } from '@/types'; // Add this import
 
 export async function POST(request: Request) {
   await dbConnect();
@@ -3688,15 +3791,11 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     const rentalRequest = await RentalRequest.create(data);
-    const response: ApiResponse<{ id: string }> = {
-      data: { id: rentalRequest._id.toString() },
-    };
+    const response: ApiResponse<RentalRequestType> = { data: rentalRequest };
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('Error creating rental request:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to create rental request',
-    };
+    const response: ApiResponse<never> = { error: 'Failed to create rental request' };
     return NextResponse.json(response, { status: 500 });
   }
 }
@@ -3714,6 +3813,94 @@ export async function GET() {
       error: 'Failed to fetch rental requests',
     };
     return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/register/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import clientPromise from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export async function POST(request: Request) {
+  try {
+    const { username, email, password } = await request.json();
+
+    if (!username || !email || !password) {
+      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db();
+
+    // Check if user already exists
+    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const result = await db.collection('users').insertOne({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.error('GOOGLE_MAPS_API_KEY is not set');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    const response = await client.distancematrix({
+      params: {
+        origins: [origin],
+        destinations: [destination],
+        key: apiKey,
+      },
+    });
+
+    if (response.data.rows[0].elements[0].status === 'OK') {
+      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+      return NextResponse.json({ distance });
+    } else {
+      console.error('Google Maps API error:', response.data);
+      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Error calculating distance:', error);
+    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
   }
 }
 ```
@@ -3818,94 +4005,6 @@ export async function GET() {
       error: 'Failed to fetch customers',
     };
     return NextResponse.json(response, { status: 500 });
-  }
-}
-```
-
-# src/app/api/register/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
-
-export async function POST(request: Request) {
-  try {
-    const { username, email, password } = await request.json();
-
-    if (!username || !email || !password) {
-      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
-    }
-
-    const client = await clientPromise;
-    const db = client.db();
-
-    // Check if user already exists
-    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-    if (existingUser) {
-      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user
-    const result = await db.collection('users').insertOne({
-      username,
-      email,
-      password: hashedPassword,
-    });
-
-    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
-  } catch (error) {
-    console.error('Registration error:', error);
-    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    console.error('GOOGLE_MAPS_API_KEY is not set');
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-  }
-
-  try {
-    const response = await client.distancematrix({
-      params: {
-        origins: [origin],
-        destinations: [destination],
-        key: apiKey,
-      },
-    });
-
-    if (response.data.rows[0].elements[0].status === 'OK') {
-      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-      return NextResponse.json({ distance });
-    } else {
-      console.error('Google Maps API error:', response.data);
-      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
-    }
-  } catch (error) {
-    console.error('Error calculating distance:', error);
-    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
   }
 }
 ```
