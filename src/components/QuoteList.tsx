@@ -15,7 +15,7 @@ const QuoteList: React.FC = () => {
     return <div>Error: {error}</div>;
   }
 
-  if (quotes.length === 0) {
+  if (!quotes || quotes.length === 0) {
     return <div>No quotes available.</div>;
   }
 
