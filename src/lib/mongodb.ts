@@ -14,17 +14,15 @@ const options: mongoose.ConnectOptions = {
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
-}
+// Use a module-level variable instead of a global
+let _mongoClientPromise: Promise<MongoClient> | undefined;
 
 if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
+  if (!_mongoClientPromise) {
     client = new MongoClient(uri);
-    global._mongoClientPromise = client.connect();
+    _mongoClientPromise = client.connect();
   }
-  clientPromise = global._mongoClientPromise;
+  clientPromise = _mongoClientPromise;
 } else {
   client = new MongoClient(uri);
   clientPromise = client.connect();
@@ -34,10 +32,22 @@ if (process.env.NODE_ENV === 'development') {
 // separate module, the client can be shared across functions.
 export default clientPromise;
 
-export async function dbConnect() {
-  if (mongoose.connection.readyState >= 1) {
+// Cached connection for mongoose
+let cachedConnection: typeof mongoose | null = null;
+
+export async function dbConnect(): Promise<void> {
+  if (cachedConnection) {
     return;
   }
 
-  return mongoose.connect(uri, options);
+  if (mongoose.connection.readyState >= 1) {
+    cachedConnection = mongoose;
+    return;
+  }
+
+  try {
+    cachedConnection = await mongoose.connect(uri, options);
+  } catch (e) {
+    throw e;
+  }
 }
