@@ -113,6 +113,7 @@ module.exports = {
     "lint": "next lint"
   },
   "dependencies": {
+    "@googlemaps/google-maps-services-js": "^3.4.0",
     "@next-auth/mongodb-adapter": "^1.1.3",
     "@prisma/client": "^5.19.1",
     "@radix-ui/react-checkbox": "^1.1.1",
@@ -169,6 +170,7 @@ export default nextConfig;
 ```ts
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
+/// <reference types="next/navigation-types/compat/navigation" />
 
 // NOTE: This file should not be edited
 // see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
@@ -330,70 +332,6 @@ export const api = {
 };
 ```
 
-# src/styles/globals.css
-
-```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
-}
-
-@layer utilities {
-  .text-balance {
-    text-wrap: balance;
-  }
-}
-
-```
-
-# src/types/quote.ts
-
-```ts
-export interface Quote {
-  _id: string;
-  customer: {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phoneNumber: string;
-  };
-  rentalRequest: string;
-  totalPrice: number;
-  components: Array<{
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-    _id: string;
-  }>;
-  status: string;
-  createdAt: string;
-  sentAt: string | null;
-  signedAt: string | null;
-  paymentStatus: string;
-  updatedAt: string;
-  __v: number;
-}
-```
-
 # src/types/next-auth.d.ts
 
 ```ts
@@ -442,29 +380,86 @@ export interface Customer {
     createdAt: string;
   }
   
+  export interface RampComponent {
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }
+  
   export interface Quote {
     _id: string;
-    customer: Customer;
-    rentalRequest: string;
-    totalPrice: number;
-    components: Array<{
-      id: string;
-      name: string;
-      quantity: number;
-      price: number;
-    }>;
+    customer: string | Customer;
+    installPrice: number;
+    deliveryPrice: number;
+    monthlyRate: number;
+    components: RampComponent[];
     status: string;
     createdAt: string;
+    updatedAt: string;
     sentAt: string | null;
     signedAt: string | null;
     paymentStatus: string;
-    updatedAt: string;
   }
   
   export interface ApiResponse<T> {
     data?: T;
     error?: string;
   }
+```
+
+# src/styles/globals.css
+
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+```
+
+# src/pages/_app.tsx
+
+```tsx
+import React from 'react';
+import type { AppProps } from 'next/app';
+import Header from '@/components/Header';
+
+function MyApp({ Component, pageProps }: AppProps) {
+  return (
+    <>
+      <Header />
+      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <Component {...pageProps} />
+      </main>
+    </>
+  );
+}
+
+export default MyApp;
 ```
 
 # src/models/index.ts
@@ -508,8 +503,9 @@ const RentalRequestSchema = new mongoose.Schema({
 
 const QuoteSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-  rentalRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'RentalRequest' },
-  totalPrice: { type: Number, required: true },
+  installPrice: { type: Number, required: true },
+  deliveryPrice: { type: Number, required: true },
+  monthlyRate: { type: Number, required: true },
   components: [{ 
     id: String,
     name: String,
@@ -522,6 +518,13 @@ const QuoteSchema = new mongoose.Schema({
   sentAt: { type: Date },
   signedAt: { type: Date },
   paymentStatus: { type: String, default: 'PENDING' },
+});
+
+const SettingsSchema = new mongoose.Schema({
+  warehouseAddress: { type: String, required: true },
+  monthlyRatePerFt: { type: Number, required: true },
+  installRatePerComponent: { type: Number, required: true },
+  deliveryRatePerMile: { type: Number, required: true },
 });
 
 export interface ICustomer extends Document {
@@ -560,9 +563,15 @@ export interface IRentalRequest extends Document {
 
 export interface IQuote extends Document {
   customer: mongoose.Types.ObjectId | ICustomer;
-  rentalRequest: mongoose.Types.ObjectId | IRentalRequest;
-  totalPrice: number;
-  components: Record<string, unknown>; // Changed from Record<string, any>
+  installPrice: number;
+  deliveryPrice: number;
+  monthlyRate: number;
+  components: {
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }[];
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -571,10 +580,18 @@ export interface IQuote extends Document {
   paymentStatus: string;
 }
 
+export interface ISettings extends Document {
+  warehouseAddress: string;
+  monthlyRatePerFt: number;
+  installRatePerComponent: number;
+  deliveryRatePerMile: number;
+}
+
 export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
 export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
 export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
 export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
+export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
 
 // Remove this line:
 // export { Customer } from './Customer';
@@ -639,6 +656,68 @@ export async function dbConnect() {
 }
 ```
 
+# src/hooks/usePricingVariables.ts
+
+```ts
+import { useState, useEffect } from 'react';
+
+interface PricingVariables {
+  warehouseAddress: string;
+  monthlyRatePerFt: number;
+  installRatePerComponent: number;
+  deliveryRatePerMile: number;
+}
+
+const defaultPricingVariables: PricingVariables = {
+  warehouseAddress: '',
+  monthlyRatePerFt: 0,
+  installRatePerComponent: 0,
+  deliveryRatePerMile: 0,
+};
+
+export const usePricingVariables = () => {
+  const [pricingVariables, setPricingVariables] = useState<PricingVariables>(defaultPricingVariables);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to fetch settings');
+        const { data } = await response.json();
+        setPricingVariables(data || defaultPricingVariables);
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        setError('Failed to load settings. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const updatePricingVariables = async (newVariables: PricingVariables) => {
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVariables),
+      });
+      if (!response.ok) throw new Error('Failed to update settings');
+      const { data } = await response.json();
+      setPricingVariables(data);
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      throw error; // Re-throw the error to be handled in the component
+    }
+  };
+
+  return { pricingVariables, updatePricingVariables, isLoading, error };
+};
+```
+
 # src/hooks/useForm.ts
 
 ```ts
@@ -681,12 +760,49 @@ export function useForm<T>(initialState: T, validate: (values: T) => FormErrors)
 }
 ```
 
+# src/hooks/useDistanceCalculation.ts
+
+```ts
+import { useState, useEffect } from 'react';
+
+export const useDistanceCalculation = (origin: string, destination: string) => {
+  const [distance, setDistance] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!origin || !destination) return;
+
+    const calculateDistance = async () => {
+      try {
+        const response = await fetch(`/api/distance?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`);
+        const data = await response.json();
+        
+        if (!response.ok) {
+          throw new Error(data.error || 'Failed to calculate distance');
+        }
+        
+        setDistance(data.distance);
+        setError(null);
+      } catch (err) {
+        console.error('Error calculating distance:', err);
+        setError('Error calculating distance. Please try again.');
+        setDistance(null);
+      }
+    };
+
+    calculateDistance();
+  }, [origin, destination]);
+
+  return { distance, error };
+};
+```
+
 # src/contexts/QuoteContext.tsx
 
 ```tsx
 'use client';
 
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
 import { api } from '@/utils/api';
 import { Quote, ApiResponse } from '@/types';
 
@@ -694,7 +810,6 @@ interface QuoteContextType {
   quotes: Quote[];
   loading: boolean;
   error: string | null;
-  fetchQuotes: () => Promise<void>;
   getQuote: (id: string) => Promise<ApiResponse<Quote>>;
   addQuote: (quote: Omit<Quote, '_id'>) => Promise<ApiResponse<Quote>>;
   updateQuote: (id: string, quote: Partial<Quote>) => Promise<ApiResponse<Quote>>;
@@ -713,20 +828,29 @@ export const useQuoteContext = () => {
 
 export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [quotes, setQuotes] = useState<Quote[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchQuotes = async () => {
+  const fetchQuotes = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const response = await api.get<Quote[]>('/quotes');
-    if (response.data) {
-      setQuotes(Array.isArray(response.data) ? response.data : []);
-    } else if (response.error) {
-      setError(response.error);
+    try {
+      const response = await api.get<Quote[]>('/quotes');
+      if (response.data) {
+        setQuotes(Array.isArray(response.data) ? response.data : []);
+      } else if (response.error) {
+        setError(response.error);
+      }
+    } catch (err) {
+      setError('Failed to fetch quotes');
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchQuotes();
+  }, [fetchQuotes]);
 
   const getQuote = async (id: string): Promise<ApiResponse<Quote>> => {
     return await api.get<Quote>(`/quotes/${id}`);
@@ -746,7 +870,7 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       setQuotes(prevQuotes => prevQuotes.map(q => q._id === id ? response.data! : q));
     }
     return response;
-    };
+  };
 
   const deleteQuote = async (id: string): Promise<ApiResponse<void>> => {
     const response = await api.delete<void>(`/quotes/${id}`);
@@ -756,12 +880,8 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     return response;
   };
 
-  useEffect(() => {
-    fetchQuotes();
-  }, []);
-
   return (
-    <QuoteContext.Provider value={{ quotes, loading, error, fetchQuotes, getQuote, addQuote, updateQuote, deleteQuote }}>
+    <QuoteContext.Provider value={{ quotes, loading, error, getQuote, addQuote, updateQuote, deleteQuote }}>
       {children}
     </QuoteContext.Provider>
   );
@@ -786,14 +906,8 @@ export default function SessionWrapper({ children }: { children: ReactNode }) {
 ```tsx
 'use client';
 
-import React, { useState } from 'react';
-
-interface RampComponent {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-}
+import React, { useState, useEffect, useCallback } from 'react';
+import { RampComponent } from '@/types';
 
 const componentTypes = [
   'Select a component',
@@ -807,12 +921,46 @@ const componentTypes = [
   '5x8 ft landing',
 ];
 
+const componentPrices = {
+  '4ft ramp section': 100,
+  '5ft ramp section': 125,
+  '6ft ramp section': 150,
+  '7ft ramp section': 175,
+  '8ft ramp section': 200,
+  '5x4 ft landing': 250,
+  '5x5 ft landing': 300,
+  '5x8 ft landing': 400,
+};
+
 interface RampConfigurationV2Props {
-  onConfigurationChange: (components: RampComponent[]) => void;
+  onConfigurationChange: (components: RampComponent[], totalLength: number) => void;
+  initialComponents?: RampComponent[];
+  readOnly?: boolean;
 }
 
-const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({ onConfigurationChange }) => {
-  const [components, setComponents] = useState<RampComponent[]>([]);
+const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({ 
+  onConfigurationChange, 
+  initialComponents = [],
+  readOnly = false
+}) => {
+  const [components, setComponents] = useState<RampComponent[]>(initialComponents);
+  const [totalLength, setTotalLength] = useState(0);
+
+  const calculateTotalLength = useCallback(() => {
+    let length = 0;
+    components.forEach(component => {
+      const match = component.name.match(/(\d+)ft/);
+      if (match) {
+        length += parseInt(match[1]) * component.quantity;
+      }
+    });
+    setTotalLength(length);
+    onConfigurationChange(components, length);
+  }, [components, onConfigurationChange]);
+
+  useEffect(() => {
+    calculateTotalLength();
+  }, [calculateTotalLength]);
 
   const handleComponentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedComponent = e.target.value;
@@ -825,11 +973,11 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({ onConfigurati
           id: Date.now().toString(),
           name: selectedComponent,
           quantity: 1,
-          price: 0,
+          price: componentPrices[selectedComponent as keyof typeof componentPrices] || 0,
         };
         const updatedComponents = [...components, newComponent];
         setComponents(updatedComponents);
-        onConfigurationChange(updatedComponents);
+        onConfigurationChange(updatedComponents, totalLength);
       }
       e.target.value = 'Select a component'; // Reset dropdown to default option
     }
@@ -840,30 +988,32 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({ onConfigurati
       component.id === id ? { ...component, quantity: Math.max(0, component.quantity + change) } : component
     ).filter(component => component.quantity > 0);
     setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents);
+    onConfigurationChange(updatedComponents, totalLength);
   };
 
   const removeComponent = (id: string) => {
     const updatedComponents = components.filter(component => component.id !== id);
     setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents);
+    onConfigurationChange(updatedComponents, totalLength);
   };
 
   return (
     <div className="bg-white shadow-md rounded-lg p-4 mb-4">
       <h2 className="text-xl font-bold mb-4">Ramp Configuration</h2>
       
-      <div className="mb-4">
-        <select 
-          onChange={handleComponentSelect}
-          className="w-full p-2 border rounded"
-          defaultValue="Select a component"
-        >
-          {componentTypes.map(type => (
-            <option key={type} value={type}>{type}</option>
-          ))}
-        </select>
-      </div>
+      {!readOnly && (
+        <div className="mb-4">
+          <select 
+            onChange={handleComponentSelect}
+            className="w-full p-2 border rounded"
+            defaultValue="Select a component"
+          >
+            {componentTypes.map(type => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
+        </div>
+      )}
 
       {components.length > 0 && (
         <div>
@@ -871,31 +1021,33 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({ onConfigurati
           <ul>
             {components.map((component) => (
               <li key={component.id} className="flex items-center justify-between mb-2">
-                <span>{component.name}</span>
-                <div className="flex items-center">
-                  <button 
-                    type="button"
-                    onClick={() => updateQuantity(component.id, -1)}
-                    className="bg-gray-200 px-2 py-1 rounded-l hover:bg-gray-300"
-                  >
-                    -
-                  </button>
-                  <span className="px-2">{component.quantity}</span>
-                  <button 
-                    type="button"
-                    onClick={() => updateQuantity(component.id, 1)}
-                    className="bg-gray-200 px-2 py-1 rounded-r hover:bg-gray-300"
-                  >
-                    +
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => removeComponent(component.id)}
-                    className="ml-2 text-red-500 hover:text-red-700"
-                  >
-                    ×
-                  </button>
-                </div>
+                <span>{component.name} (x{component.quantity})</span>
+                {!readOnly && (
+                  <div className="flex items-center">
+                    <button 
+                      type="button"
+                      onClick={() => updateQuantity(component.id, -1)}
+                      className="bg-gray-200 px-2 py-1 rounded-l hover:bg-gray-300"
+                    >
+                      -
+                    </button>
+                    <span className="px-2">{component.quantity}</span>
+                    <button 
+                      type="button"
+                      onClick={() => updateQuantity(component.id, 1)}
+                      className="bg-gray-200 px-2 py-1 rounded-r hover:bg-gray-300"
+                    >
+                      +
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => removeComponent(component.id)}
+                      className="ml-2 text-red-500 hover:text-red-700"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -916,10 +1068,17 @@ export default RampConfigurationV2;
 import React from 'react';
 import Link from 'next/link';
 import { useQuoteContext } from '@/contexts/QuoteContext';
-import { Quote } from '@/types';
+import { Customer } from '@/types';
 
 const QuoteList: React.FC = () => {
   const { quotes, loading, error } = useQuoteContext();
+
+  const getCustomerName = (customer: string | Customer): string => {
+    if (typeof customer === 'string') {
+      return 'N/A';
+    }
+    return `${customer.firstName} ${customer.lastName}`;
+  };
 
   if (loading) {
     return <div>Loading quotes...</div>;
@@ -929,37 +1088,48 @@ const QuoteList: React.FC = () => {
     return <div>Error: {error}</div>;
   }
 
-  if (!quotes || quotes.length === 0) {
-    return <div>No quotes available.</div>;
-  }
-
   return (
-    <div>
-      <h2 className="text-2xl font-bold mb-4">Quotes</h2>
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total Price</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Created At</th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {quotes.map((quote: Quote) => (
-            <tr key={quote._id}>
-              <td className="px-6 py-4 whitespace-nowrap">{quote.customer.firstName} {quote.customer.lastName}</td>
-              <td className="px-6 py-4 whitespace-nowrap">${quote.totalPrice.toFixed(2)}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{quote.status}</td>
-              <td className="px-6 py-4 whitespace-nowrap">{new Date(quote.createdAt).toLocaleDateString()}</td>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <Link href={`/quotes/${quote._id}`} className="text-indigo-600 hover:text-indigo-900">View</Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div className="flex flex-col">
+      <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+        <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
+          <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Customer
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Status
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Created At
+                  </th>
+                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {quotes.map((quote) => (
+                  <tr key={quote._id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      {getCustomerName(quote.customer)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">{quote.status}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">{new Date(quote.createdAt).toLocaleDateString()}</td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <Link href={`/quotes/${quote._id}`} className="text-indigo-600 hover:text-indigo-900">
+                        View
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
@@ -967,16 +1137,40 @@ const QuoteList: React.FC = () => {
 export default QuoteList;
 ```
 
+# src/components/QuoteLayout.tsx
+
+```tsx
+import React from 'react';
+import { QuoteProvider } from '@/contexts/QuoteContext';
+
+interface QuoteLayoutProps {
+  children: React.ReactNode;
+}
+
+const QuoteLayout: React.FC<QuoteLayoutProps> = ({ children }) => {
+  return (
+    <QuoteProvider>
+      {children}
+    </QuoteProvider>
+  );
+};
+
+export default QuoteLayout;
+```
+
 # src/components/QuoteDetails.tsx
 
 ```tsx
-// src/components/QuoteDetails.tsx
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuoteContext } from '@/contexts/QuoteContext';
 import { Quote } from '@/types';
 import { api } from '@/utils/api';
+import CustomerDetails from '@/components/CustomerDetails';
+import RampConfigurationV2 from '@/components/RampConfiguration';
+import PricingComponent from '@/components/PricingComponent';
 
 interface QuoteDetailsProps {
   id: string;
@@ -985,7 +1179,7 @@ interface QuoteDetailsProps {
 const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
   const { updateQuote, deleteQuote } = useQuoteContext();
   const [isEditing, setIsEditing] = useState(false);
-  const [editedQuote, setEditedQuote] = useState<Quote | null>(null);
+  const [quote, setQuote] = useState<Quote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -995,7 +1189,7 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
       setIsLoading(true);
       const response = await api.get<Quote>(`/quotes/${id}`);
       if (response.data) {
-        setEditedQuote(response.data);
+        setQuote(response.data);
       } else if (response.error) {
         setError(response.error);
       }
@@ -1005,30 +1199,17 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
     fetchQuote();
   }, [id]);
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
-
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
-  if (!editedQuote) {
-    return <div>Quote not found</div>;
-  }
-
   const handleEdit = () => {
     setIsEditing(true);
   };
 
-  const handleSave = async () => {
-    if (editedQuote) {
-      const response = await updateQuote(id, editedQuote);
-      if (response.error) {
-        setError(response.error);
-      } else {
-        setIsEditing(false);
-      }
+  const handleSave = async (updatedQuote: Quote) => {
+    const response = await updateQuote(id, updatedQuote);
+    if (response.error) {
+      setError(response.error);
+    } else {
+      setQuote(response.data!);
+      setIsEditing(false);
     }
   };
 
@@ -1043,88 +1224,82 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setEditedQuote(prev => prev ? { ...prev, [name]: value } : null);
-  };
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
+  }
+
+  if (!quote) {
+    return <div>Quote not found</div>;
+  }
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-      <div className="px-4 py-5 sm:px-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">Quote Details</h3>
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Quote Details</h1>
+      
+      <div className="mb-6">
+        {quote.customer && typeof quote.customer !== 'string' && (
+          <CustomerDetails 
+            customer={quote.customer} 
+            showActions={false}
+          />
+        )}
       </div>
-      <div className="border-t border-gray-200">
-        <dl>
-          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Customer</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="customerName"
-                  value={`${editedQuote.customer.firstName} ${editedQuote.customer.lastName}`}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded"
-                  disabled
-                />
-              ) : (
-                `${editedQuote.customer.firstName} ${editedQuote.customer.lastName}`
-              )}
-            </dd>
-          </div>
-          <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Total Price</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {isEditing ? (
-                <input
-                  type="number"
-                  name="totalPrice"
-                  value={editedQuote.totalPrice}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded"
-                />
-              ) : (
-                `$${editedQuote.totalPrice.toFixed(2)}`
-              )}
-            </dd>
-          </div>
-          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Status</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {isEditing ? (
-                <input
-                  type="text"
-                  name="status"
-                  value={editedQuote.status}
-                  onChange={handleChange}
-                  className="w-full p-2 border rounded"
-                />
-              ) : (
-                editedQuote.status
-              )}
-            </dd>
-          </div>
-        </dl>
+
+      <div className="mb-6">
+        <RampConfigurationV2 
+          onConfigurationChange={() => {}}
+          initialComponents={quote.components}
+          readOnly={!isEditing}
+        />
       </div>
-      <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
+
+      <div className="mb-6">
+        <PricingComponent 
+          rampComponents={quote.components}
+          totalLength={quote.components.reduce((total, component) => {
+            const match = component.name.match(/(\d+)ft/);
+            return total + (match ? parseInt(match[1]) * component.quantity : 0);
+          }, 0)}
+          installAddress={typeof quote.customer !== 'string' ? quote.customer.installAddress || '' : ''}
+          onPriceCalculated={() => {}}
+          initialInstallPrice={quote.installPrice}
+          initialDeliveryPrice={quote.deliveryPrice}
+          initialMonthlyRate={quote.monthlyRate}
+          readOnly={!isEditing}
+        />
+      </div>
+
+      <div className="mt-6 flex justify-between">
         {isEditing ? (
-          <button
-            onClick={handleSave}
-            className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-          >
-            Save
-          </button>
+          <>
+            <button 
+              onClick={() => setIsEditing(false)}
+              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Cancel
+            </button>
+            <button 
+              onClick={() => handleSave(quote)}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Save Changes
+            </button>
+          </>
         ) : (
           <>
             <button
               onClick={handleEdit}
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 mr-2"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
               Edit
             </button>
             <button
               onClick={handleDelete}
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
             >
               Delete
             </button>
@@ -1138,17 +1313,221 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 export default QuoteDetails;
 ```
 
+# src/components/PricingVariables.tsx
+
+```tsx
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { AddressField } from '@/components/ui/AddressField';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { usePricingVariables } from '@/hooks/usePricingVariables';
+
+const PricingVariables: React.FC = () => {
+  const { pricingVariables, updatePricingVariables, isLoading, error } = usePricingVariables();
+  const [formData, setFormData] = useState(pricingVariables);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFormData(pricingVariables);
+  }, [pricingVariables]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddressChange = (value: string) => {
+    setFormData(prev => ({ ...prev, warehouseAddress: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setSaveError(null);
+    try {
+      await updatePricingVariables(formData);
+      // Optionally, you can add a success message here
+    } catch (error) {
+      setSaveError('Failed to save settings. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div className="text-center py-4">Loading pricing variables...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-500 text-center py-4">Error loading pricing variables: {error}</div>;
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <h2 className="text-2xl font-semibold mb-4">Pricing Variables</h2>
+      
+      <div>
+        <AddressField
+          value={formData.warehouseAddress}
+          onChange={handleAddressChange}
+          label="Warehouse Address"
+          placeholder="Enter warehouse address"
+        />
+      </div>
+      
+      <div>
+        <label htmlFor="monthlyRatePerFt" className="block text-sm font-medium text-gray-700">
+          Monthly Rate per ft ($)
+        </label>
+        <Input
+          type="number"
+          id="monthlyRatePerFt"
+          name="monthlyRatePerFt"
+          value={formData.monthlyRatePerFt}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
+      
+      <div>
+        <label htmlFor="installRatePerComponent" className="block text-sm font-medium text-gray-700">
+          Install Rate per Component ($)
+        </label>
+        <Input
+          type="number"
+          id="installRatePerComponent"
+          name="installRatePerComponent"
+          value={formData.installRatePerComponent}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
+      
+      <div>
+        <label htmlFor="deliveryRatePerMile" className="block text-sm font-medium text-gray-700">
+          Delivery Rate per Mile ($)
+        </label>
+        <Input
+          type="number"
+          id="deliveryRatePerMile"
+          name="deliveryRatePerMile"
+          value={formData.deliveryRatePerMile}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
+      
+      {saveError && <div className="text-red-500">{saveError}</div>}
+      
+      <Button type="submit" disabled={isSaving}>
+        {isSaving ? 'Saving...' : 'Save Changes'}
+      </Button>
+    </form>
+  );
+};
+
+export default PricingVariables;
+```
+
 # src/components/PricingComponent.tsx
 
 ```tsx
-import React from 'react';
+'use client';
 
-const PricingComponent: React.FC = () => {
+import React, { useEffect, useState } from 'react';
+import { usePricingVariables } from '@/hooks/usePricingVariables';
+import { useDistanceCalculation } from '@/hooks/useDistanceCalculation';
+import { RampComponent } from '@/types';
+
+interface PricingComponentProps {
+  rampComponents: RampComponent[];
+  totalLength: number;
+  installAddress: string;
+  onPriceCalculated: (installPrice: number, deliveryPrice: number, monthlyRate: number) => void;
+  initialInstallPrice?: number;
+  initialDeliveryPrice?: number;
+  initialMonthlyRate?: number;
+  readOnly?: boolean;
+}
+
+const PricingComponent: React.FC<PricingComponentProps> = ({ 
+  rampComponents, 
+  totalLength, 
+  installAddress,
+  onPriceCalculated,
+  initialInstallPrice,
+  initialDeliveryPrice,
+  initialMonthlyRate,
+  readOnly = false
+}) => {
+  const { pricingVariables, isLoading: isPricingLoading, error: pricingError } = usePricingVariables();
+  const { distance, error: distanceError } = useDistanceCalculation(pricingVariables.warehouseAddress, installAddress);
+  const [installPrice, setInstallPrice] = useState(initialInstallPrice || 0);
+  const [deliveryPrice, setDeliveryPrice] = useState(initialDeliveryPrice || 0);
+  const [monthlyRate, setMonthlyRate] = useState(initialMonthlyRate || 0);
+
+  useEffect(() => {
+    if (isPricingLoading || distance === null) return;
+
+    const calculatePrices = () => {
+      const install = rampComponents.reduce((total, component) => 
+        total + (component.quantity * pricingVariables.installRatePerComponent), 0);
+      const delivery = distance * pricingVariables.deliveryRatePerMile;
+      const monthly = totalLength * pricingVariables.monthlyRatePerFt;
+
+      setInstallPrice(Number(install.toFixed(2)));
+      setDeliveryPrice(Number(delivery.toFixed(2)));
+      setMonthlyRate(Number(monthly.toFixed(2)));
+
+      onPriceCalculated(install, delivery, monthly);
+    };
+
+    calculatePrices();
+  }, [rampComponents, totalLength, distance, pricingVariables, isPricingLoading, onPriceCalculated]);
+
+  if (isPricingLoading) {
+    return <div>Loading pricing information...</div>;
+  }
+
+  if (pricingError) {
+    return <div>Error loading pricing variables: {pricingError}</div>;
+  }
+
+  if (distanceError) {
+    return (
+      <div>
+        <p>Error calculating distance: {distanceError}</p>
+        <p>Unable to provide accurate pricing at this time.</p>
+      </div>
+    );
+  }
+
+  if (distance === null) {
+    return <div>Calculating distance...</div>;
+  }
+
   return (
     <div className="bg-white shadow-md rounded-lg p-4 mb-4">
-      <h2 className="text-xl font-bold mb-2">Pricing</h2>
-      <p>This is a placeholder for the pricing component.</p>
-      {/* TODO: Implement actual pricing calculation and display */}
+      <h2 className="text-xl font-bold mb-4">Pricing Details</h2>
+      <div className="space-y-2">
+        <p>Installation Price: ${installPrice.toFixed(2)}</p>
+        <p>Delivery Price: ${deliveryPrice.toFixed(2)}</p>
+        <p>Monthly Rate: ${monthlyRate.toFixed(2)}</p>
+      </div>
+      {!readOnly && (
+        <button 
+          onClick={() => onPriceCalculated(installPrice, deliveryPrice, monthlyRate)}
+          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Update Pricing
+        </button>
+      )}
     </div>
   );
 };
@@ -1182,18 +1561,34 @@ export default Layout;
 import React from 'react';
 import Link from 'next/link';
 
-const Header: React.FC = () => (
-  <header className="bg-blue-600 dark:bg-blue-800 text-white">
-    <nav className="container mx-auto px-4 sm:px-6 lg:px-8 py-4">
-      <ul className="flex flex-wrap space-x-4">
-        <li><Link href="/" className="hover:underline">Home</Link></li>
-        <li><Link href="/rental-requests" className="hover:underline">Rental Requests</Link></li>
-        <li><Link href="/quotes" className="hover:underline">Quotes</Link></li>
-        <li><Link href="/customers" className="hover:underline">Customers</Link></li>
-      </ul>
-    </nav>
-  </header>
-);
+const Header: React.FC = () => {
+  return (
+    <header className="bg-white shadow-md">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex">
+            <div className="flex-shrink-0 flex items-center">
+              <Link href="/" className="text-xl font-bold text-gray-800">
+                Your App Name
+              </Link>
+            </div>
+            <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+              <Link href="/quotes" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                Quotes
+              </Link>
+              <Link href="/customers" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                Customers
+              </Link>
+              <Link href="/settings" className="text-gray-600 hover:text-gray-900 px-3 py-2 rounded-md text-sm font-medium">
+                Settings
+              </Link>
+            </div>
+          </div>
+        </div>
+      </nav>
+    </header>
+  );
+};
 
 export default Header;
 ```
@@ -1312,16 +1707,24 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => 
       {isLoading && <p>Loading...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {searchResults.length > 0 && (
-        <ul className="mt-2 border rounded-md">
+        <ul className="mt-2 border rounded-md max-h-80 overflow-y-auto">
           {searchResults.map(customer => (
             <li 
               key={customer._id} 
-              className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
               onClick={() => onSelectCustomer(customer)}
             >
-              <div>{customer.firstName} {customer.lastName}</div>
+              <div className="font-semibold">{customer.firstName} {customer.lastName}</div>
               <div className="text-sm text-gray-600">{customer.email}</div>
-              <div className="text-sm text-gray-600">{customer.installAddress}</div>
+              <div className="text-sm text-gray-600">Phone: {customer.phoneNumber}</div>
+              {customer.installAddress && (
+                <div className="text-sm text-gray-600">Install Address: {customer.installAddress}</div>
+              )}
+              {customer.mobilityAids && customer.mobilityAids.length > 0 && (
+                <div className="text-sm text-gray-600">
+                  Mobility Aids: {customer.mobilityAids.join(', ')}
+                </div>
+              )}
             </li>
           ))}
         </ul>
@@ -1406,7 +1809,7 @@ export default CustomerList;
 ```tsx
 "use client"
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Customer } from '@/types';
 import { api } from '@/utils/api';
@@ -1416,32 +1819,16 @@ import { Button } from '@/components/ui/Button';
 import { AddressField } from '@/components/ui/AddressField';
 
 interface CustomerDetailsProps {
-  id: string;
+  customer: Customer;
+  showActions?: boolean;
+  onCustomerUpdate?: (updatedCustomer: Customer) => void;
 }
 
-const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const CustomerDetails: React.FC<CustomerDetailsProps> = ({ customer, showActions = false, onCustomerUpdate }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editedCustomer, setEditedCustomer] = useState<Customer | null>(null);
+  const [editedCustomer, setEditedCustomer] = useState<Customer>(customer);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-
-  useEffect(() => {
-    const fetchCustomer = async () => {
-      setIsLoading(true);
-      const response = await api.get<Customer>(`/customers/${id}`);
-      if (response.data) {
-        setCustomer(response.data);
-        setEditedCustomer(response.data);
-      } else if (response.error) {
-        setError(response.error);
-      }
-      setIsLoading(false);
-    };
-
-    fetchCustomer();
-  }, [id]);
 
   const handleEdit = () => setIsEditing(true);
   const handleCancelEdit = () => {
@@ -1450,12 +1837,12 @@ const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
   };
 
   const handleSaveEdit = async () => {
-    if (!editedCustomer) return;
-
-    const response = await api.put<Customer>(`/customers/${id}`, editedCustomer);
+    const response = await api.put<Customer>(`/customers/${customer._id}`, editedCustomer);
     if (response.data) {
-      setCustomer(response.data);
       setIsEditing(false);
+      if (onCustomerUpdate) {
+        onCustomerUpdate(response.data);
+      }
     } else if (response.error) {
       setError(response.error);
     }
@@ -1463,7 +1850,7 @@ const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
 
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this customer?')) {
-      const response = await api.delete<void>(`/customers/${id}`);
+      const response = await api.delete<void>(`/customers/${customer._id}`);
       if (!response.error) {
         router.push('/customers');
       } else {
@@ -1473,7 +1860,6 @@ const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!editedCustomer) return;
     setEditedCustomer({
       ...editedCustomer,
       [e.target.name]: e.target.value,
@@ -1481,116 +1867,86 @@ const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
   };
 
   const handleAddressChange = (value: string) => {
-    if (!editedCustomer) return;
     setEditedCustomer({
       ...editedCustomer,
       installAddress: value,
     });
   };
 
-  if (isLoading) return <p>Loading...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!customer) return <p>Customer not found.</p>;
-
   return (
-    <div className="max-w-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Customer Details</h1>
-      <div className="bg-white shadow-md rounded-lg p-6">
-        {isEditing ? (
-          <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-4">
-            <div>
-              <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
-              <Input
-                id="firstName"
-                name="firstName"
-                value={editedCustomer?.firstName || ''}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div>
-              <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
-              <Input
-                id="lastName"
-                name="lastName"
-                value={editedCustomer?.lastName || ''}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-              <Input
-                id="email"
-                name="email"
-                value={editedCustomer?.email || ''}
-                onChange={handleInputChange}
-              />
-            </div>
-            <div>
-              <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">Phone Number</label>
-              <Input
-                id="phoneNumber"
-                name="phoneNumber"
-                value={editedCustomer?.phoneNumber || ''}
-                onChange={handleInputChange}
-              />
-            </div>
-            <AddressField
-              value={editedCustomer?.installAddress || ''}
-              onChange={handleAddressChange}
-              label="Address"
-              placeholder="Enter customer's address"
+    <div className="bg-white shadow-md rounded-lg p-6">
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      {isEditing ? (
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-4">
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+            <Input
+              id="firstName"
+              name="firstName"
+              value={editedCustomer.firstName}
+              onChange={handleInputChange}
             />
-            <div className="flex justify-between">
-              <Button type="button" onClick={handleCancelEdit} variant="secondary">
-                Cancel
-              </Button>
-              <Button type="submit">Save Changes</Button>
-            </div>
-          </form>
-        ) : (
-          <>
-            <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
-            <p><strong>Email:</strong> {customer.email}</p>
-            <p><strong>Phone:</strong> {customer.phoneNumber}</p>
-            <p><strong>Installation Address:</strong> {customer.installAddress}</p>
-            <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
+          </div>
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+            <Input
+              id="lastName"
+              name="lastName"
+              value={editedCustomer.lastName}
+              onChange={handleInputChange}
+            />
+          </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+            <Input
+              id="email"
+              name="email"
+              value={editedCustomer.email}
+              onChange={handleInputChange}
+            />
+          </div>
+          <div>
+            <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">Phone Number</label>
+            <Input
+              id="phoneNumber"
+              name="phoneNumber"
+              value={editedCustomer.phoneNumber}
+              onChange={handleInputChange}
+            />
+          </div>
+          <AddressField
+            value={editedCustomer.installAddress || ''}
+            onChange={handleAddressChange}
+            label="Install Address"
+            placeholder="Enter customer's install address"
+          />
+          <div className="flex justify-between">
+            <Button type="button" onClick={handleCancelEdit} variant="secondary">
+              Cancel
+            </Button>
+            <Button type="submit">Save Changes</Button>
+          </div>
+        </form>
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
+          <p><strong>Email:</strong> {customer.email}</p>
+          <p><strong>Phone:</strong> {customer.phoneNumber}</p>
+          <p><strong>Install Address:</strong> {customer.installAddress || 'Not provided'}</p>
+          <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
+          {showActions && (
             <div className="mt-6 flex justify-between">
               <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
               <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
             </div>
-          </>
-        )}
-      </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
 
 export default CustomerDetails;
-```
-
-# src/components/CustomerCard.tsx
-
-```tsx
-import React from 'react';
-import { Customer } from '@/types';
-
-interface CustomerCardProps {
-  customer: Customer;
-}
-
-const CustomerCard: React.FC<CustomerCardProps> = ({ customer }) => {
-  return (
-    <div className="border p-4 rounded-md">
-      <h2 className="text-xl font-bold">{customer.firstName} {customer.lastName}</h2>
-      <p>Email: {customer.email}</p>
-      <p>Phone: {customer.phoneNumber}</p>
-      {customer.installAddress && <p>Install Address: {customer.installAddress}</p>}
-      <p>Mobility Aids: {customer.mobilityAids.join(', ')}</p>
-    </div>
-  );
-};
-
-export default CustomerCard;
 ```
 
 # src/components/CreateQuoteButton.tsx
@@ -1601,43 +1957,12 @@ export default CustomerCard;
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
-import { useQuoteContext } from '@/contexts/QuoteContext';
 
 const CreateQuoteButton: React.FC = () => {
   const router = useRouter();
-  const { addQuote } = useQuoteContext();
 
-  const handleClick = async () => {
-    try {
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          customer: 'placeholder', // Replace this with an actual customer ID when available
-          totalPrice: 0,
-          components: [],
-          status: 'DRAFT',
-          createdAt: new Date().toISOString(),
-          sentAt: null,
-          signedAt: null,
-          paymentStatus: 'PENDING',
-          // Remove the rentalRequest field if it's not required at this stage
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create quote');
-      }
-
-      const newQuote = await response.json();
-      await addQuote(newQuote.data);
-      router.push(`/quotes/${newQuote.data._id}`);
-    } catch (error) {
-      console.error('Failed to create quote:', error);
-      // Handle error (e.g., show error message to user)
-    }
+  const handleClick = () => {
+    router.push('/quotes/new');
   };
 
   return (
@@ -1683,29 +2008,26 @@ export default function Home() {
 
 ```tsx
 import React from 'react';
-import '@/styles/globals.css';
-import SessionWrapper from '../components/SessionWrapper';
-import Header from '../components/Header';
-import Footer from '../components/Footer';
+import Header from '@/components/Header';
+import { QuoteProvider } from '@/contexts/QuoteContext';
+import '@/styles/globals.css'; // Make sure this import is present to include your global styles
 
-export const metadata = {
-  title: 'Wheelchair Ramp Rental',
-  description: 'Rent wheelchair ramps for your needs',
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
   return (
     <html lang="en">
-      <body>
-        <SessionWrapper>
-          <div className="flex flex-col min-h-screen">
-            <Header />
-            <main className="flex-grow container mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <body className="bg-gray-100 min-h-screen">
+        <QuoteProvider>
+          <Header />
+          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+            <main className="py-6">
               {children}
             </main>
-            <Footer />
           </div>
-        </SessionWrapper>
+        </QuoteProvider>
       </body>
     </html>
   );
@@ -2056,218 +2378,24 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, vari
 );
 ```
 
-# src/app/rental-requests/page.tsx
+# src/app/settings/page.tsx
 
 ```tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
-import { api } from '@/utils/api';
-import { RentalRequest } from '@/types';
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
 
-const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
-  <div className="bg-white shadow-md rounded-lg p-6 mb-4">
-    <h3 className="text-lg font-semibold mb-2">{request.firstName} {request.lastName}</h3>
-    <p className="text-sm text-gray-600 mb-1">Email: {request.email}</p>
-    <p className="text-sm text-gray-600 mb-1">Phone: {request.phone}</p>
-    <p className="text-sm text-gray-600 mb-1">Installation: {request.installationTimeframe}</p>
-    <p className="text-sm text-gray-600 mb-1">Address: {request.installAddress}</p>
-    <p className="text-sm text-gray-600 mb-4">Submitted: {new Date(request.createdAt).toLocaleDateString()}</p>
-    <Link href={`/rental-requests/${request._id}`} passHref>
-      <Button variant="secondary" className="w-full">View Details</Button>
-    </Link>
-  </div>
-);
-
-const RentalRequestsPage = () => {
-  const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchRentalRequests = async () => {
-      try {
-        const response = await api.get<RentalRequest[]>('/rental-requests');
-        if (response.data) {
-          setRentalRequests(Array.isArray(response.data) ? response.data : []);
-        } else if (response.error) {
-          setError(response.error);
-        }
-      } catch (err) {
-        setError('Failed to load rental requests. Please try again later.');
-        console.error('Error fetching rental requests:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchRentalRequests();
-  }, []);
-
+const SettingsPage: React.FC = () => {
   return (
-    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
-      <div className="mb-6">
-        <Link href="/rental-requests/new" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-          New Rental Request
-        </Link>
-      </div>
-      {isLoading ? (
-        <p>Loading rental requests...</p>
-      ) : error ? (
-        <p className="text-red-500">{error}</p>
-      ) : rentalRequests.length === 0 ? (
-        <p>No rental requests found.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rentalRequests.map((request) => (
-            <RentalRequestCard key={request._id} request={request} />
-          ))}
-        </div>
-      )}
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
     </div>
   );
 };
 
-export default RentalRequestsPage;
-```
-
-# src/app/quotes/page.tsx
-
-```tsx
-// src/app/quotes/page.tsx
-
-import React from 'react';
-import { QuoteProvider } from '@/contexts/QuoteContext';
-import QuoteList from '@/components/QuoteList';
-import CreateQuoteButton from '@/components/CreateQuoteButton';
-
-export default function Quotes() {
-  return (
-    <QuoteProvider>
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Quotes</h1>
-          <CreateQuoteButton />
-        </div>
-        <QuoteList />
-      </div>
-    </QuoteProvider>
-  );
-}
-```
-
-# src/app/login/page.tsx
-
-```tsx
-'use client';
-
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-
-export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
-  const router = useRouter();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (isLogin) {
-      const result = await signIn('credentials', {
-        username,
-        password,
-        redirect: false,
-      });
-
-      if (result?.error) {
-        alert(result.error);
-      } else {
-        router.push('/');
-      }
-    } else {
-      // Registration logic
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      if (response.ok) {
-        alert('Registration successful! Please log in.');
-        setIsLogin(true);
-      } else {
-        const data = await response.json();
-        alert(data.message || 'Registration failed');
-      }
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg">
-        <h3 className="text-2xl font-bold text-center">
-          {isLogin ? 'Login to your account' : 'Create an account'}
-        </h3>
-        <form onSubmit={handleSubmit}>
-          <div className="mt-4">
-            <div>
-              <label className="block" htmlFor="username">Username</label>
-              <input
-                type="text"
-                placeholder="Username"
-                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            {!isLogin && (
-              <div className="mt-4">
-                <label className="block" htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-            )}
-            <div className="mt-4">
-              <label className="block" htmlFor="password">Password</label>
-              <input
-                type="password"
-                placeholder="Password"
-                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            <div className="flex items-baseline justify-between">
-              <button className="px-6 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-900" type="submit">
-                {isLogin ? 'Login' : 'Register'}
-              </button>
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:underline"
-                onClick={() => setIsLogin(!isLogin)}
-              >
-                {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
+export default SettingsPage;
 ```
 
 # src/components/RentalRequestForm/RentalRequestForm.tsx
@@ -2774,6 +2902,220 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
+# src/app/rental-requests/page.tsx
+
+```tsx
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
+import { api } from '@/utils/api';
+import { RentalRequest } from '@/types';
+
+const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
+  <div className="bg-white shadow-md rounded-lg p-6 mb-4">
+    <h3 className="text-lg font-semibold mb-2">{request.firstName} {request.lastName}</h3>
+    <p className="text-sm text-gray-600 mb-1">Email: {request.email}</p>
+    <p className="text-sm text-gray-600 mb-1">Phone: {request.phone}</p>
+    <p className="text-sm text-gray-600 mb-1">Installation: {request.installationTimeframe}</p>
+    <p className="text-sm text-gray-600 mb-1">Address: {request.installAddress}</p>
+    <p className="text-sm text-gray-600 mb-4">Submitted: {new Date(request.createdAt).toLocaleDateString()}</p>
+    <Link href={`/rental-requests/${request._id}`} passHref>
+      <Button variant="secondary" className="w-full">View Details</Button>
+    </Link>
+  </div>
+);
+
+const RentalRequestsPage = () => {
+  const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchRentalRequests = async () => {
+      try {
+        const response = await api.get<RentalRequest[]>('/rental-requests');
+        if (response.data) {
+          setRentalRequests(Array.isArray(response.data) ? response.data : []);
+        } else if (response.error) {
+          setError(response.error);
+        }
+      } catch (err) {
+        setError('Failed to load rental requests. Please try again later.');
+        console.error('Error fetching rental requests:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRentalRequests();
+  }, []);
+
+  return (
+    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
+      <div className="mb-6">
+        <Link href="/rental-requests/new" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          New Rental Request
+        </Link>
+      </div>
+      {isLoading ? (
+        <p>Loading rental requests...</p>
+      ) : error ? (
+        <p className="text-red-500">{error}</p>
+      ) : rentalRequests.length === 0 ? (
+        <p>No rental requests found.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {rentalRequests.map((request) => (
+            <RentalRequestCard key={request._id} request={request} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RentalRequestsPage;
+```
+
+# src/app/login/page.tsx
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const [isLogin, setIsLogin] = useState(true);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isLogin) {
+      const result = await signIn('credentials', {
+        username,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        alert(result.error);
+      } else {
+        router.push('/');
+      }
+    } else {
+      // Registration logic
+      const response = await fetch('/api/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, email, password }),
+      });
+
+      if (response.ok) {
+        alert('Registration successful! Please log in.');
+        setIsLogin(true);
+      } else {
+        const data = await response.json();
+        alert(data.message || 'Registration failed');
+      }
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg">
+        <h3 className="text-2xl font-bold text-center">
+          {isLogin ? 'Login to your account' : 'Create an account'}
+        </h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mt-4">
+            <div>
+              <label className="block" htmlFor="username">Username</label>
+              <input
+                type="text"
+                placeholder="Username"
+                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            {!isLogin && (
+              <div className="mt-4">
+                <label className="block" htmlFor="email">Email</label>
+                <input
+                  type="email"
+                  placeholder="Email"
+                  className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+            )}
+            <div className="mt-4">
+              <label className="block" htmlFor="password">Password</label>
+              <input
+                type="password"
+                placeholder="Password"
+                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            <div className="flex items-baseline justify-between">
+              <button className="px-6 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-900" type="submit">
+                {isLogin ? 'Login' : 'Register'}
+              </button>
+              <button
+                type="button"
+                className="text-sm text-blue-600 hover:underline"
+                onClick={() => setIsLogin(!isLogin)}
+              >
+                {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+```
+
+# src/app/quotes/page.tsx
+
+```tsx
+// src/app/quotes/page.tsx
+
+import React from 'react';
+import QuoteLayout from '@/components/QuoteLayout';
+import QuoteList from '@/components/QuoteList';
+import CreateQuoteButton from '@/components/CreateQuoteButton';
+
+export default function Quotes() {
+  return (
+    <QuoteLayout>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Quotes</h1>
+          <CreateQuoteButton />
+        </div>
+        <QuoteList />
+      </div>
+    </QuoteLayout>
+  );
+}
+```
+
 # src/app/customers/page.tsx
 
 ```tsx
@@ -2812,137 +3154,6 @@ export default function NewRentalRequest() {
     </div>
   );
 }
-```
-
-# src/app/quotes/new/page.tsx
-
-```tsx
-'use client';
-
-import React, { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useQuoteContext, QuoteProvider } from '@/contexts/QuoteContext';
-import CustomerSearch from '@/components/CustomerSearch';
-import CustomerCard from '@/components/CustomerCard';
-import RampConfigurationV2 from '@/components/RampConfiguration';
-import { Customer } from '@/types';
-
-interface RampComponent {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-}
-
-const NewQuotePageContent: React.FC = () => {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { addQuote } = useQuoteContext();
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
-
-  // Check if a customer ID was provided in the URL
-  React.useEffect(() => {
-    const customerId = searchParams.get('customerId');
-    if (customerId) {
-      const fetchCustomer = async () => {
-        try {
-          const response = await fetch(`/api/customers/${customerId}`);
-          if (!response.ok) {
-            throw new Error('Failed to fetch customer');
-          }
-          const customerData = await response.json();
-          setSelectedCustomer(customerData);
-        } catch (error) {
-          console.error('Error fetching customer:', error);
-          // Handle error (e.g., show an error message to the user)
-        }
-      };
-
-      fetchCustomer();
-    }
-  }, [searchParams]);
-
-  const handleSelectCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer);
-  };
-
-  const handleRampConfigurationChange = (components: RampComponent[]) => {
-    setRampComponents(components);
-  };
-
-  const handleCreateQuote = async () => {
-    if (!selectedCustomer) {
-      alert('Please select a customer');
-      return;
-    }
-
-    try {
-      const quoteData = {
-        customer: selectedCustomer._id,
-        totalPrice: 0, // This will be calculated later
-        components: rampComponents,
-        status: 'DRAFT',
-        createdAt: new Date().toISOString(),
-        sentAt: null,
-        signedAt: null,
-        paymentStatus: 'UNPAID',
-        // Add a placeholder rentalRequest for now
-        rentalRequest: '000000000000000000000000', // Placeholder ObjectId
-      };
-
-      console.log('Sending quote data:', quoteData);
-
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(quoteData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.details || 'Failed to create quote');
-      }
-
-      const newQuote = await response.json();
-      await addQuote(newQuote);
-      router.push('/quotes');
-    } catch (error) {
-      console.error('Failed to create quote:', error);
-      alert('Failed to create quote. Please try again.');
-    }
-  };
-
-  return (
-    <div className="max-w-2xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Create New Quote</h1>
-      <div className="space-y-4">
-        {!selectedCustomer && <CustomerSearch onSelectCustomer={handleSelectCustomer} />}
-        {selectedCustomer && <CustomerCard customer={selectedCustomer} />}
-        <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
-        <button 
-          type="button"
-          onClick={handleCreateQuote}
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Create Quote
-        </button>
-      </div>
-    </div>
-  );
-};
-
-const NewQuotePage: React.FC = () => {
-  return (
-    <QuoteProvider>
-      <NewQuotePageContent />
-    </QuoteProvider>
-  );
-};
-
-export default NewQuotePage;
 ```
 
 # src/app/rental-requests/[id]/page.tsx
@@ -3061,6 +3272,119 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
 }
 ```
 
+# src/app/quotes/new/page.tsx
+
+```tsx
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import CustomerSearch from '@/components/CustomerSearch';
+import CustomerDetails from '@/components/CustomerDetails';
+import RampConfigurationV2 from '@/components/RampConfiguration';
+import PricingComponent from '@/components/PricingComponent';
+import { Customer, RampComponent } from '@/types';
+
+const NewQuotePage: React.FC = () => {
+  const router = useRouter();
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
+  const [totalLength, setTotalLength] = useState(0);
+  const [installPrice, setInstallPrice] = useState(0);
+  const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [monthlyRate, setMonthlyRate] = useState(0);
+
+  const handleSelectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+  };
+
+  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
+    setRampComponents(components);
+    setTotalLength(length);
+  };
+
+  const handlePriceCalculated = (install: number, delivery: number, monthly: number) => {
+    setInstallPrice(install);
+    setDeliveryPrice(delivery);
+    setMonthlyRate(monthly);
+  };
+
+  const handleCreateQuote = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer');
+      return;
+    }
+
+    try {
+      const quoteData = {
+        customer: selectedCustomer._id,
+        installPrice,
+        deliveryPrice,
+        monthlyRate,
+        components: rampComponents,
+        status: 'DRAFT',
+        createdAt: new Date().toISOString(),
+        sentAt: null,
+        signedAt: null,
+        paymentStatus: 'PENDING',
+      };
+
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(quoteData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create quote');
+      }
+
+      await response.json();
+      router.push('/quotes');
+    } catch (error) {
+      console.error('Failed to create quote:', error);
+      alert('Failed to create quote. Please try again.');
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Create New Quote</h1>
+      <CustomerSearch onSelectCustomer={handleSelectCustomer} />
+      {selectedCustomer && (
+        <div className="mt-6 mb-6">
+          <CustomerDetails 
+            customer={selectedCustomer} 
+            showActions={false}
+            onCustomerUpdate={(updatedCustomer) => setSelectedCustomer(updatedCustomer)}
+          />
+        </div>
+      )}
+      <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
+      {selectedCustomer && (
+        <PricingComponent 
+          rampComponents={rampComponents} 
+          totalLength={totalLength} 
+          installAddress={selectedCustomer.installAddress || ''}
+          onPriceCalculated={handlePriceCalculated}
+        />
+      )}
+      <button 
+        onClick={handleCreateQuote}
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"
+      >
+        Create Quote
+      </button>
+    </div>
+  );
+};
+
+export default NewQuotePage;
+```
+
 # src/app/quotes/[id]/page.tsx
 
 ```tsx
@@ -3079,52 +3403,6 @@ export default function QuotePage({ params }: { params: { id: string } }) {
       </div>
     </QuoteProvider>
   );
-}
-```
-
-# src/app/api/rental-requests/route.ts
-
-```ts
-// src/app/api/rental-requests/route.ts
-
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest } from '@/models';
-import { ApiResponse, RentalRequest as RentalRequestType } from '@/types';
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const rentalRequest = await RentalRequest.create(data);
-    const response: ApiResponse<{ id: string }> = {
-      data: { id: rentalRequest._id.toString() },
-    };
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Error creating rental request:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to create rental request',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-
-export async function GET() {
-  await dbConnect();
-
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error in GET /api/rental-requests:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch rental requests',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
 }
 ```
 
@@ -3315,71 +3593,22 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
 }
 ```
 
-# src/app/api/register/route.ts
+# src/app/api/settings/route.ts
 
 ```ts
-import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
-
-export async function POST(request: Request) {
-  try {
-    const { username, email, password } = await request.json();
-
-    if (!username || !email || !password) {
-      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
-    }
-
-    const client = await clientPromise;
-    const db = client.db();
-
-    // Check if user already exists
-    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-    if (existingUser) {
-      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user
-    const result = await db.collection('users').insertOne({
-      username,
-      email,
-      password: hashedPassword,
-    });
-
-    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
-  } catch (error) {
-    console.error('Registration error:', error);
-    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/quotes/route.ts
-
-```ts
-// src/app/api/quotes/route.ts
-
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
-import { Quote } from '@/models';
-import { ApiResponse, Quote as QuoteType } from '@/types';
+import { Settings } from '@/models';
 
 export async function GET() {
   await dbConnect();
 
   try {
-    const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
-    const response: ApiResponse<QuoteType[]> = { data: quotes };
-    return NextResponse.json(response);
+    const settings = await Settings.findOne();
+    return NextResponse.json({ data: settings });
   } catch (error) {
-    console.error('Error fetching quotes:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch quotes',
-    };
-    return NextResponse.json(response, { status: 500 });
+    console.error('Error fetching settings:', error);
+    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
   }
 }
 
@@ -3388,40 +3617,11 @@ export async function POST(request: Request) {
 
   try {
     const data = await request.json();
-    console.log('Received quote data:', data);
-
-    // Validate required fields
-    if (!data.customer || typeof data.totalPrice !== 'number') {
-      throw new Error('Missing required fields: customer or totalPrice');
-    }
-
-    // Create a new quote object with only the necessary fields
-    const quoteData = {
-      customer: data.customer, // This should now be a valid ObjectId string
-      totalPrice: data.totalPrice,
-      components: data.components || [],
-      status: data.status || 'DRAFT',
-      createdAt: data.createdAt || new Date(),
-      sentAt: data.sentAt,
-      signedAt: data.signedAt,
-      paymentStatus: data.paymentStatus || 'PENDING',
-    };
-
-    const quote = await Quote.create(quoteData);
-    console.log('Quote created:', quote);
-
-    await quote.populate('customer');
-    console.log('Quote populated:', quote);
-
-    const response: ApiResponse<QuoteType> = { data: quote };
-    return NextResponse.json(response, { status: 201 });
+    const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
+    return NextResponse.json({ data: settings });
   } catch (error) {
-    console.error('Error creating quote:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const response: ApiResponse<never> = {
-      error: `Failed to create quote: ${errorMessage}`,
-    };
-    return NextResponse.json(response, { status: 500 });
+    console.error('Error updating settings:', error);
+    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
   }
 }
 ```
@@ -3472,6 +3672,106 @@ export async function POST(request: Request) {
 }
 ```
 
+# src/app/api/rental-requests/route.ts
+
+```ts
+// src/app/api/rental-requests/route.ts
+
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest } from '@/models';
+import { ApiResponse, RentalRequest as RentalRequestType } from '@/types';
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const rentalRequest = await RentalRequest.create(data);
+    const response: ApiResponse<{ id: string }> = {
+      data: { id: rentalRequest._id.toString() },
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating rental request:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to create rental request',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch rental requests',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/quotes/route.ts
+
+```ts
+// src/app/api/quotes/route.ts
+
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Quote, IQuote } from '@/models';
+import { ApiResponse } from '@/types'; // Import ApiResponse type
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
+    const response: ApiResponse<IQuote[]> = { data: quotes };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching quotes:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch quotes',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    console.log('Received quote data:', data);
+
+    // Validate required fields
+    if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const quote = await Quote.create(data);
+    console.log('Quote created:', quote);
+
+    const populatedQuote = await Quote.findById(quote._id).populate('customer');
+    console.log('Quote populated:', populatedQuote);
+
+    const response: ApiResponse<IQuote> = { data: populatedQuote };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating quote:', error);
+    const response: ApiResponse<never> = { error: 'Failed to create quote' };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
 # src/app/api/customers/route.ts
 
 ```ts
@@ -3518,6 +3818,94 @@ export async function GET() {
       error: 'Failed to fetch customers',
     };
     return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/register/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import clientPromise from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export async function POST(request: Request) {
+  try {
+    const { username, email, password } = await request.json();
+
+    if (!username || !email || !password) {
+      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db();
+
+    // Check if user already exists
+    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const result = await db.collection('users').insertOne({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.error('GOOGLE_MAPS_API_KEY is not set');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    const response = await client.distancematrix({
+      params: {
+        origins: [origin],
+        destinations: [destination],
+        key: apiKey,
+      },
+    });
+
+    if (response.data.rows[0].elements[0].status === 'OK') {
+      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+      return NextResponse.json({ distance });
+    } else {
+      console.error('Google Maps API error:', response.data);
+      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Error calculating distance:', error);
+    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
   }
 }
 ```
@@ -3683,67 +4071,38 @@ export async function POST(request: Request) {
 }
 ```
 
-# src/app/api/auth/[...nextauth]/route.ts
+# src/app/api/customers/search/route.ts
 
 ```ts
-import NextAuth from "next-auth";
-import { authOptions } from "./auth";
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Customer } from '@/models';
 
-const handler = NextAuth(authOptions);
+export async function GET(request: Request) {
+  await dbConnect();
 
-export { handler as GET, handler as POST };
-```
+  const { searchParams } = new URL(request.url);
+  const term = searchParams.get('term');
 
-# src/app/api/auth/[...nextauth]/auth.ts
+  if (!term) {
+    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
+  }
 
-```ts
-import { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import clientPromise from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
+  try {
+    const customers = await Customer.find({
+      $or: [
+        { firstName: { $regex: term, $options: 'i' } },
+        { lastName: { $regex: term, $options: 'i' } },
+        { email: { $regex: term, $options: 'i' } },
+      ]
+    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
 
-export const authOptions: NextAuthOptions = {
-  providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          return null;
-        }
-
-        const client = await clientPromise;
-        const db = client.db();
-        const user = await db.collection('users').findOne({ username: credentials.username });
-
-        if (user && await bcrypt.compare(credentials.password, user.password)) {
-          return { id: user._id.toString(), name: user.username, email: user.email };
-        }
-        return null;
-      }
-    })
-  ],
-  pages: {
-    signIn: '/login',
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-};
+    return NextResponse.json(customers);
+  } catch (error) {
+    console.error('Error searching customers:', error);
+    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
+  }
+}
 ```
 
 # src/app/api/customers/[id]/route.ts
@@ -3828,37 +4187,66 @@ export async function DELETE(
 }
 ```
 
-# src/app/api/customers/search/route.ts
+# src/app/api/auth/[...nextauth]/route.ts
 
 ```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Customer } from '@/models';
+import NextAuth from "next-auth";
+import { authOptions } from "./auth";
 
-export async function GET(request: Request) {
-  await dbConnect();
+const handler = NextAuth(authOptions);
 
-  const { searchParams } = new URL(request.url);
-  const term = searchParams.get('term');
+export { handler as GET, handler as POST };
+```
 
-  if (!term) {
-    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
-  }
+# src/app/api/auth/[...nextauth]/auth.ts
 
-  try {
-    const customers = await Customer.find({
-      $or: [
-        { firstName: { $regex: term, $options: 'i' } },
-        { lastName: { $regex: term, $options: 'i' } },
-        { email: { $regex: term, $options: 'i' } },
-      ]
-    }).select('firstName lastName email phoneNumber address mobilityAids').limit(10);
+```ts
+import { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
+import clientPromise from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
 
-    return NextResponse.json(customers);
-  } catch (error) {
-    console.error('Error searching customers:', error);
-    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
-  }
-}
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          return null;
+        }
+
+        const client = await clientPromise;
+        const db = client.db();
+        const user = await db.collection('users').findOne({ username: credentials.username });
+
+        if (user && await bcrypt.compare(credentials.password, user.password)) {
+          return { id: user._id.toString(), name: user.username, email: user.email };
+        }
+        return null;
+      }
+    })
+  ],
+  pages: {
+    signIn: '/login',
+  },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
+    },
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
+};
 ```
 

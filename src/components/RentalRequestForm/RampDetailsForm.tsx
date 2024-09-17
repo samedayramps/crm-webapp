@@ -6,11 +6,26 @@ import { Select } from '@/components/ui/Select';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Button } from '@/components/ui/Button';
 import { AddressField } from '@/components/ui/AddressField';
-import { RentalRequest } from '@/types';
 
 interface RampDetailsFormProps {
-  values: Partial<RentalRequest>;
-  errors: { [key: string]: string };
+  formData: {
+    knowRampLength: string;
+    estimatedRampLength: string;
+    knowRentalDuration: string;
+    estimatedRentalDuration: string;
+    installationTimeframe: string;
+    mobilityAids: string[];
+    installAddress: string;
+  };
+  errors: {
+    knowRampLength?: string;
+    estimatedRampLength?: string;
+    knowRentalDuration?: string;
+    estimatedRentalDuration?: string;
+    installationTimeframe?: string;
+    mobilityAids?: string;
+    installAddress?: string;
+  };
   onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] }) => void;
   onPrevPage: () => void;
   onSubmit: () => void;
@@ -18,7 +33,7 @@ interface RampDetailsFormProps {
 }
 
 export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
-  values,
+  formData,
   errors,
   onChange,
   onPrevPage,
@@ -27,8 +42,8 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
 }) => {
   const handleCheckboxChange = (aid: string) => (checked: boolean) => {
     const newAids = checked
-      ? [...(values.mobilityAids || []), aid]
-      : (values.mobilityAids || []).filter((item) => item !== aid);
+      ? [...(formData.mobilityAids || []), aid]
+      : (formData.mobilityAids || []).filter((item) => item !== aid);
     onChange({ name: 'mobilityAids', value: newAids });
   };
 
@@ -44,7 +59,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRampLength"
                 value="yes"
-                checked={values.knowRampLength === 'yes'}
+                checked={formData.knowRampLength === 'yes'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -55,7 +70,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRampLength"
                 value="no"
-                checked={values.knowRampLength === 'no'}
+                checked={formData.knowRampLength === 'no'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -63,14 +78,14 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             </label>
           </div>
         </div>
-        {values.knowRampLength === 'yes' && (
+        {formData.knowRampLength === 'yes' && (
           <div>
             <label htmlFor="estimatedRampLength" className="block text-sm font-medium">Estimated ramp length (in feet)</label>
             <Input
               id="estimatedRampLength"
               name="estimatedRampLength"
               type="number"
-              value={values.estimatedRampLength || ''}
+              value={formData.estimatedRampLength || ''}
               onChange={onChange}
               error={errors.estimatedRampLength}
               className="mt-1"
@@ -86,7 +101,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRentalDuration"
                 value="yes"
-                checked={values.knowRentalDuration === 'yes'}
+                checked={formData.knowRentalDuration === 'yes'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -97,7 +112,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
                 type="radio"
                 name="knowRentalDuration"
                 value="no"
-                checked={values.knowRentalDuration === 'no'}
+                checked={formData.knowRentalDuration === 'no'}
                 onChange={onChange}
                 className="form-radio"
               />
@@ -105,14 +120,14 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             </label>
           </div>
         </div>
-        {values.knowRentalDuration === 'yes' && (
+        {formData.knowRentalDuration === 'yes' && (
           <div>
             <label htmlFor="estimatedRentalDuration" className="block text-sm font-medium">Estimated rental duration (in days)</label>
             <Input
               id="estimatedRentalDuration"
               name="estimatedRentalDuration"
               type="number"
-              value={values.estimatedRentalDuration || ''}
+              value={formData.estimatedRentalDuration || ''}
               onChange={onChange}
               error={errors.estimatedRentalDuration}
               className="mt-1"
@@ -125,7 +140,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
           <Select
             id="installationTimeframe"
             name="installationTimeframe"
-            value={values.installationTimeframe || ''}
+            value={formData.installationTimeframe || ''}
             onChange={onChange}
             error={errors.installationTimeframe}
           >
@@ -143,7 +158,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
             {['Wheelchair', 'Motorized scooter', 'Walker'].map((aid) => (
               <label key={aid} className="inline-flex items-center">
                 <Checkbox
-                  checked={values.mobilityAids?.includes(aid) || false}
+                  checked={formData.mobilityAids?.includes(aid) || false}
                   onCheckedChange={handleCheckboxChange(aid)}
                 />
                 <span className="ml-2 text-sm">{aid}</span>
@@ -152,7 +167,7 @@ export const RampDetailsForm: React.FC<RampDetailsFormProps> = ({
           </div>
         </div>
         <AddressField
-          value={values.installAddress || ''}
+          value={formData.installAddress || ''}
           onChange={(value) => onChange({ target: { name: 'installAddress', value } } as React.ChangeEvent<HTMLInputElement>)}
           error={errors.installAddress}
           label="Installation Address"

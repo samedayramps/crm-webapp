@@ -4,20 +4,29 @@ import React from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormattedPhoneInput } from '@/components/ui/FormattedPhoneInput';
-import { RentalRequest } from '@/types';
 
 interface ContactInfoFormProps {
-  values: Partial<RentalRequest>;
-  errors: { [key: string]: string };
+  formData: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+  };
+  errors: {
+    firstName?: string;
+    lastName?: string;
+    email?: string;
+    phone?: string;
+  };
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onNextPage: () => void;
 }
 
 export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
-  values,
+  formData,
   errors,
   onChange,
-  onNextPage,
+  onNextPage
 }) => {
   return (
     <div className="space-y-6 text-gray-800 dark:text-gray-100">
@@ -28,7 +37,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <Input
             id="firstName"
             name="firstName"
-            value={values.firstName || ''}
+            value={formData.firstName || ''}
             onChange={onChange}
             error={errors.firstName}
             className="mt-1"
@@ -39,7 +48,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <Input
             id="lastName"
             name="lastName"
-            value={values.lastName || ''}
+            value={formData.lastName || ''}
             onChange={onChange}
             error={errors.lastName}
             className="mt-1"
@@ -51,7 +60,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
             id="email"
             name="email"
             type="email"
-            value={values.email || ''}
+            value={formData.email || ''}
             onChange={onChange}
             error={errors.email}
             className="mt-1"
@@ -60,7 +69,7 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
         <div>
           <label htmlFor="phone" className="block text-sm font-medium">Phone Number</label>
           <FormattedPhoneInput
-            value={values.phone || ''}
+            value={formData.phone || ''}
             onChange={(value) => onChange({ target: { name: 'phone', value } } as React.ChangeEvent<HTMLInputElement>)}
             error={errors.phone}
             className="mt-1"

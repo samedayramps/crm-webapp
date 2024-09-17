@@ -20,6 +20,11 @@ interface RentalRequestFormData {
   installAddress: string;
 }
 
+// Define a new type for errors where all values are strings
+type FormErrors = {
+  [K in keyof RentalRequestFormData]?: string;
+};
+
 interface EditRentalRequestFormProps {
   initialData: IRentalRequest;
   onSubmit: (data: IRentalRequest) => Promise<void>;
@@ -44,15 +49,18 @@ export const EditRentalRequestForm: React.FC<EditRentalRequestFormProps> = ({
     mobilityAids: initialData.mobilityAids,
     installAddress: initialData.installAddress,
   });
-  const [errors, setErrors] = useState<Partial<RentalRequestFormData>>({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleInputChange = (name: string, value: string | string[]) => {
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] }
+  ) => {
+    const { name, value } = 'target' in e ? e.target : e;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<RentalRequestFormData> = {};
+    const newErrors: FormErrors = {};
     // Implement form validation logic here
     // For example:
     if (!formData.firstName) newErrors.firstName = 'First name is required';
