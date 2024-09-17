@@ -1,100 +1,104 @@
 'use client';
 
-import React from 'react';
-import { useForm } from '@/hooks/useForm';
-import { api } from '@/utils/api';
-import { RentalRequest } from '@/types';
+import React, { useState } from 'react';
 import { ContactInfoForm } from './ContactInfoForm';
 import { RampDetailsForm } from './RampDetailsForm';
-import { ConfirmationPage } from './ConfirmationPage';
+import { RentalRequest } from '@/types';
 
-const initialState: Omit<RentalRequest, '_id' | 'createdAt'> = {
-  firstName: '',
-  lastName: '',
-  email: '',
-  phone: '',
-  knowRampLength: 'no',
-  estimatedRampLength: '',
-  knowRentalDuration: 'no',
-  estimatedRentalDuration: '',
-  installationTimeframe: '',
-  mobilityAids: [],
-  installAddress: '',
+type FormErrors = {
+  [K in keyof Omit<RentalRequest, '_id' | 'createdAt'>]?: string;
 };
 
-const validateForm = (values: Omit<RentalRequest, '_id' | 'createdAt'>) => {
-  const errors: { [key: string]: string } = {};
-  if (!values.firstName) errors.firstName = 'First name is required';
-  if (!values.lastName) errors.lastName = 'Last name is required';
-  if (!values.email) errors.email = 'Email is required';
-  // Add more validation as needed
-  return errors;
-};
+type ChangeEventOrCustomChange = 
+  | React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  | { name: string; value: string | string[] };
 
-const RentalRequestForm: React.FC = () => {
-  const [page, setPage] = React.useState(1);
-  const { values, errors, isSubmitting, handleChange, handleSubmit, setValues } = useForm(initialState, validateForm);
+interface RentalRequestFormProps {
+  onSubmit: (data: Omit<RentalRequest, '_id' | 'createdAt'>) => Promise<void>;
+}
+
+export const RentalRequestForm: React.FC<RentalRequestFormProps> = ({ onSubmit }) => {
+  const [page, setPage] = useState(1);
+  const [values, setValues] = useState<Omit<RentalRequest, '_id' | 'createdAt'>>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    knowRampLength: '',
+    estimatedRampLength: '',
+    knowRentalDuration: '',
+    estimatedRentalDuration: '',
+    installationTimeframe: '',
+    mobilityAids: [],
+    installAddress: '',
+  });
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleChange = (e: ChangeEventOrCustomChange) => {
+    const { name, value } = 'target' in e ? e.target : e;
+    setValues(prev => ({ ...prev, [name]: value }));
+  };
 
   const handleNextPage = () => {
-    if (Object.keys(validateForm(values)).length === 0) {
-      setPage(prev => prev + 1);
+    if (validatePage(1)) {
+      setPage(2);
     }
   };
 
   const handlePrevPage = () => {
-    setPage(prev => prev - 1);
+    setPage(1);
   };
 
-  const onSubmit = async (formData: Omit<RentalRequest, '_id' | 'createdAt'>) => {
-    const response = await api.post<RentalRequest>('/rental-requests', formData);
-    if (response.data) {
-      setPage(3); // Move to confirmation page
-    } else if (response.error) {
-      console.error('Error submitting form:', response.error);
-      // Handle error (e.g., show error message to user)
+  const validatePage = (pageNum: number): boolean => {
+    const newErrors: FormErrors = {};
+    if (pageNum === 1) {
+      if (!values.firstName) newErrors.firstName = 'First name is required';
+      if (!values.lastName) newErrors.lastName = 'Last name is required';
+      if (!values.email) newErrors.email = 'Email is required';
+      if (!values.phone) newErrors.phone = 'Phone number is required';
+    } else if (pageNum === 2) {
+      // Add validation for page 2 fields here
+    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = async () => {
+    if (validatePage(2)) {
+      setIsSubmitting(true);
+      try {
+        await onSubmit(values);
+        // Handle successful submission (e.g., show success message, redirect)
+      } catch (error) {
+        console.error('Error submitting form:', error);
+        // Handle error (e.g., show error message)
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   };
 
-  const handleStartOver = () => {
-    setPage(1);
-    setValues(initialState);
-  };
-
   return (
-    <div className="max-w-md mx-auto mt-10">
-      {page < 3 ? (
-        <form onSubmit={(e) => { e.preventDefault(); handleSubmit(onSubmit); }} className="bg-white shadow-md rounded px-8 pt-6 pb-8 mb-4">
-          <div className="text-gray-800 dark:text-gray-100">
-            {page === 1 && (
-              <ContactInfoForm
-                values={values}
-                errors={errors}
-                onChange={handleChange}
-                onNextPage={handleNextPage}
-              />
-            )}
-            {page === 2 && (
-              <RampDetailsForm
-                values={values}
-                errors={errors}
-                onChange={handleChange}
-                onPrevPage={handlePrevPage}
-                onSubmit={() => handleSubmit(onSubmit)}
-                isSubmitting={isSubmitting}
-              />
-            )}
-          </div>
-          {errors.submit && (
-            <div className="mt-4 p-4 bg-red-100 border border-red-400 text-red-700 rounded">
-              Error: {errors.submit}
-            </div>
-          )}
-        </form>
-      ) : (
-        <ConfirmationPage onStartOver={handleStartOver} />
+    <div>
+      {page === 1 && (
+        <ContactInfoForm
+          formData={values}
+          errors={errors}
+          onChange={handleChange}
+          onNextPage={handleNextPage}
+        />
+      )}
+      {page === 2 && (
+        <RampDetailsForm
+          formData={values}
+          errors={errors}
+          onChange={handleChange}
+          onPrevPage={handlePrevPage}
+          onSubmit={handleSubmit}
+          isSubmitting={isSubmitting}
+        />
       )}
     </div>
   );
 };
-
-export default RentalRequestForm;
