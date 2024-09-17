@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         { lastName: { $regex: term, $options: 'i' } },
         { email: { $regex: term, $options: 'i' } },
       ]
-    }).select('firstName lastName email phoneNumber address mobilityAids').limit(10);
+    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
 
     return NextResponse.json(customers);
   } catch (error) {
