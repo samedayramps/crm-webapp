@@ -52,16 +52,24 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => 
       {isLoading && <p>Loading...</p>}
       {error && <p className="text-red-500">{error}</p>}
       {searchResults.length > 0 && (
-        <ul className="mt-2 border rounded-md">
+        <ul className="mt-2 border rounded-md max-h-80 overflow-y-auto">
           {searchResults.map(customer => (
             <li 
               key={customer._id} 
-              className="px-3 py-2 hover:bg-gray-100 cursor-pointer"
+              className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
               onClick={() => onSelectCustomer(customer)}
             >
-              <div>{customer.firstName} {customer.lastName}</div>
+              <div className="font-semibold">{customer.firstName} {customer.lastName}</div>
               <div className="text-sm text-gray-600">{customer.email}</div>
-              <div className="text-sm text-gray-600">{customer.installAddress}</div>
+              <div className="text-sm text-gray-600">Phone: {customer.phoneNumber}</div>
+              {customer.installAddress && (
+                <div className="text-sm text-gray-600">Install Address: {customer.installAddress}</div>
+              )}
+              {customer.mobilityAids && customer.mobilityAids.length > 0 && (
+                <div className="text-sm text-gray-600">
+                  Mobility Aids: {customer.mobilityAids.join(', ')}
+                </div>
+              )}
             </li>
           ))}
         </ul>

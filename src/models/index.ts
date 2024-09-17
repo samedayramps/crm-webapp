@@ -36,8 +36,9 @@ const RentalRequestSchema = new mongoose.Schema({
 
 const QuoteSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-  rentalRequest: { type: mongoose.Schema.Types.ObjectId, ref: 'RentalRequest' },
-  totalPrice: { type: Number, required: true },
+  installPrice: { type: Number, required: true },
+  deliveryPrice: { type: Number, required: true },
+  monthlyRate: { type: Number, required: true },
   components: [{ 
     id: String,
     name: String,
@@ -50,6 +51,13 @@ const QuoteSchema = new mongoose.Schema({
   sentAt: { type: Date },
   signedAt: { type: Date },
   paymentStatus: { type: String, default: 'PENDING' },
+});
+
+const SettingsSchema = new mongoose.Schema({
+  warehouseAddress: { type: String, required: true },
+  monthlyRatePerFt: { type: Number, required: true },
+  installRatePerComponent: { type: Number, required: true },
+  deliveryRatePerMile: { type: Number, required: true },
 });
 
 export interface ICustomer extends Document {
@@ -88,9 +96,15 @@ export interface IRentalRequest extends Document {
 
 export interface IQuote extends Document {
   customer: mongoose.Types.ObjectId | ICustomer;
-  rentalRequest: mongoose.Types.ObjectId | IRentalRequest;
-  totalPrice: number;
-  components: Record<string, unknown>; // Changed from Record<string, any>
+  installPrice: number;
+  deliveryPrice: number;
+  monthlyRate: number;
+  components: {
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }[];
   status: string;
   createdAt: Date;
   updatedAt: Date;
@@ -99,10 +113,18 @@ export interface IQuote extends Document {
   paymentStatus: string;
 }
 
+export interface ISettings extends Document {
+  warehouseAddress: string;
+  monthlyRatePerFt: number;
+  installRatePerComponent: number;
+  deliveryRatePerMile: number;
+}
+
 export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
 export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
 export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
 export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
+export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
 
 // Remove this line:
 // export { Customer } from './Customer';

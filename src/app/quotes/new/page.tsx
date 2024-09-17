@@ -2,25 +2,34 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuoteContext } from '@/contexts/QuoteContext';
 import CustomerSearch from '@/components/CustomerSearch';
 import CustomerDetails from '@/components/CustomerDetails';
 import RampConfigurationV2 from '@/components/RampConfiguration';
 import PricingComponent from '@/components/PricingComponent';
-import { Customer, Quote } from '@/types';
+import { Customer, RampComponent } from '@/types';
 
 const NewQuotePage: React.FC = () => {
   const router = useRouter();
-  const { addQuote } = useQuoteContext();
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [rampComponents, setRampComponents] = useState<Quote['components']>([]);
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
+  const [totalLength, setTotalLength] = useState(0);
+  const [installPrice, setInstallPrice] = useState(0);
+  const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [monthlyRate, setMonthlyRate] = useState(0);
 
   const handleSelectCustomer = (customer: Customer) => {
     setSelectedCustomer(customer);
   };
 
-  const handleRampConfigurationChange = (components: Quote['components']) => {
+  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
     setRampComponents(components);
+    setTotalLength(length);
+  };
+
+  const handlePriceCalculated = (install: number, delivery: number, monthly: number) => {
+    setInstallPrice(install);
+    setDeliveryPrice(delivery);
+    setMonthlyRate(monthly);
   };
 
   const handleCreateQuote = async () => {
@@ -32,7 +41,9 @@ const NewQuotePage: React.FC = () => {
     try {
       const quoteData = {
         customer: selectedCustomer._id,
-        totalPrice: 0, // This should be calculated based on the ramp configuration
+        installPrice,
+        deliveryPrice,
+        monthlyRate,
         components: rampComponents,
         status: 'DRAFT',
         createdAt: new Date().toISOString(),
@@ -54,8 +65,7 @@ const NewQuotePage: React.FC = () => {
         throw new Error(errorData.error || 'Failed to create quote');
       }
 
-      const newQuote = await response.json();
-      await addQuote(newQuote.data);
+      await response.json();
       router.push('/quotes');
     } catch (error) {
       console.error('Failed to create quote:', error);
@@ -77,7 +87,14 @@ const NewQuotePage: React.FC = () => {
         </div>
       )}
       <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
-      <PricingComponent />
+      {selectedCustomer && (
+        <PricingComponent 
+          rampComponents={rampComponents} 
+          totalLength={totalLength} 
+          installAddress={selectedCustomer.installAddress || ''}
+          onPriceCalculated={handlePriceCalculated}
+        />
+      )}
       <button 
         onClick={handleCreateQuote}
         className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"

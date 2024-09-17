@@ -2,15 +2,15 @@
 
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
-import { Quote } from '@/models';
-import { ApiResponse, Quote as QuoteType } from '@/types';
+import { Quote, IQuote } from '@/models';
+import { ApiResponse } from '@/types'; // Import ApiResponse type
 
 export async function GET() {
   await dbConnect();
 
   try {
     const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
-    const response: ApiResponse<QuoteType[]> = { data: quotes };
+    const response: ApiResponse<IQuote[]> = { data: quotes };
     return NextResponse.json(response);
   } catch (error) {
     console.error('Error fetching quotes:', error);
@@ -29,36 +29,21 @@ export async function POST(request: Request) {
     console.log('Received quote data:', data);
 
     // Validate required fields
-    if (!data.customer || typeof data.totalPrice !== 'number') {
-      return NextResponse.json({ error: 'Missing required fields: customer or totalPrice' }, { status: 400 });
+    if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    // Create a new quote object with only the necessary fields
-    const quoteData = {
-      customer: data.customer, // This should now be a valid ObjectId string
-      totalPrice: data.totalPrice,
-      components: data.components || [],
-      status: data.status || 'DRAFT',
-      createdAt: data.createdAt || new Date(),
-      sentAt: data.sentAt,
-      signedAt: data.signedAt,
-      paymentStatus: data.paymentStatus || 'PENDING',
-    };
-
-    const quote = await Quote.create(quoteData);
+    const quote = await Quote.create(data);
     console.log('Quote created:', quote);
 
-    await quote.populate('customer');
-    console.log('Quote populated:', quote);
+    const populatedQuote = await Quote.findById(quote._id).populate('customer');
+    console.log('Quote populated:', populatedQuote);
 
-    const response: ApiResponse<QuoteType> = { data: quote };
+    const response: ApiResponse<IQuote> = { data: populatedQuote };
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const response: ApiResponse<never> = {
-      error: `Failed to create quote: ${errorMessage}`,
-    };
+    const response: ApiResponse<never> = { error: 'Failed to create quote' };
     return NextResponse.json(response, { status: 500 });
   }
 }

@@ -35,23 +35,17 @@ export interface Customer {
   
   export interface Quote {
     _id: string;
-    customer: {
-      _id: string;
-      firstName: string;
-      lastName: string;
-      email: string;
-      phoneNumber: string;
-    } | null;
-    rentalRequest: string;
-    totalPrice: number;
+    customer: string | Customer;
+    installPrice: number;
+    deliveryPrice: number;
+    monthlyRate: number;
     components: RampComponent[];
     status: string;
     createdAt: string;
+    updatedAt: string;
     sentAt: string | null;
     signedAt: string | null;
     paymentStatus: string;
-    updatedAt: string;
-    __v: number;
   }
   
   export interface ApiResponse<T> {
