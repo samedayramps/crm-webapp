@@ -3,7 +3,7 @@
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest } from '@/models';
-import { ApiResponse, RentalRequest as RentalRequestType } from '@/types';
+import { ApiResponse, RentalRequest as RentalRequestType } from '@/types'; // Add this import
 
 export async function POST(request: Request) {
   await dbConnect();
@@ -11,15 +11,11 @@ export async function POST(request: Request) {
   try {
     const data = await request.json();
     const rentalRequest = await RentalRequest.create(data);
-    const response: ApiResponse<{ id: string }> = {
-      data: { id: rentalRequest._id.toString() },
-    };
+    const response: ApiResponse<RentalRequestType> = { data: rentalRequest };
     return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('Error creating rental request:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to create rental request',
-    };
+    const response: ApiResponse<never> = { error: 'Failed to create rental request' };
     return NextResponse.json(response, { status: 500 });
   }
 }

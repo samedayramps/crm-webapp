@@ -17,7 +17,7 @@ interface RentalRequestFormProps {
   onSubmit: (data: Omit<RentalRequest, '_id' | 'createdAt'>) => Promise<void>;
 }
 
-export const RentalRequestForm: React.FC<RentalRequestFormProps> = ({ onSubmit }) => {
+const RentalRequestForm: React.FC<RentalRequestFormProps> = ({ onSubmit }) => {
   const [page, setPage] = useState(1);
   const [values, setValues] = useState<Omit<RentalRequest, '_id' | 'createdAt'>>({
     firstName: '',
@@ -102,3 +102,5 @@ export const RentalRequestForm: React.FC<RentalRequestFormProps> = ({ onSubmit }
     </div>
   );
 };
+
+export default RentalRequestForm;
