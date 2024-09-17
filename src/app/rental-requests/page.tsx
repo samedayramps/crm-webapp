@@ -2,23 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Button } from '@/components/ui/Button'; // Make sure this import is correct
-
-interface RentalRequest {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  knowRampLength: string;
-  estimatedRampLength: string;
-  knowRentalDuration: string;
-  estimatedRentalDuration: string;
-  installationTimeframe: string;
-  mobilityAids: string[];
-  installAddress: string;
-  createdAt: string;
-}
+import { Button } from '@/components/ui/Button';
+import { api } from '@/utils/api';
+import { RentalRequest } from '@/types';
 
 const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
   <div className="bg-white shadow-md rounded-lg p-6 mb-4">
@@ -42,12 +28,12 @@ const RentalRequestsPage = () => {
   useEffect(() => {
     const fetchRentalRequests = async () => {
       try {
-        const response = await fetch('/api/rental-requests');
-        if (!response.ok) {
-          throw new Error('Failed to fetch rental requests');
+        const response = await api.get<RentalRequest[]>('/rental-requests');
+        if (response.data) {
+          setRentalRequests(Array.isArray(response.data) ? response.data : []);
+        } else if (response.error) {
+          setError(response.error);
         }
-        const data = await response.json();
-        setRentalRequests(data);
       } catch (err) {
         setError('Failed to load rental requests. Please try again later.');
         console.error('Error fetching rental requests:', err);

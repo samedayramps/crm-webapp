@@ -1,16 +1,23 @@
+// src/app/api/quotes/route.ts
+
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import { Quote } from '@/models';
+import { ApiResponse, Quote as QuoteType } from '@/types';
 
 export async function GET() {
   await dbConnect();
 
   try {
-    const quotes = await Quote.find().populate('customer');
-    return NextResponse.json(quotes);
+    const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
+    const response: ApiResponse<QuoteType[]> = { data: quotes };
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Error fetching quotes:', error);
-    return NextResponse.json({ error: 'Failed to fetch quotes' }, { status: 500 });
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch quotes',
+    };
+    return NextResponse.json(response, { status: 500 });
   }
 }
 
@@ -21,29 +28,37 @@ export async function POST(request: Request) {
     const data = await request.json();
     console.log('Received quote data:', data);
 
-    // Validate the data
-    if (!data.customer || !data.components || !Array.isArray(data.components)) {
-      return NextResponse.json({ error: 'Invalid quote data' }, { status: 400 });
+    // Validate required fields
+    if (!data.customer || typeof data.totalPrice !== 'number') {
+      return NextResponse.json({ error: 'Missing required fields: customer or totalPrice' }, { status: 400 });
     }
 
-    // Remove the _id field if it exists
-    delete data._id;
+    // Create a new quote object with only the necessary fields
+    const quoteData = {
+      customer: data.customer, // This should now be a valid ObjectId string
+      totalPrice: data.totalPrice,
+      components: data.components || [],
+      status: data.status || 'DRAFT',
+      createdAt: data.createdAt || new Date(),
+      sentAt: data.sentAt,
+      signedAt: data.signedAt,
+      paymentStatus: data.paymentStatus || 'PENDING',
+    };
 
-    // Create the quote
-    const quote = new Quote(data);
-    await quote.save();
-    console.log('Created quote:', quote);
+    const quote = await Quote.create(quoteData);
+    console.log('Quote created:', quote);
 
-    // Populate the customer field
-    const populatedQuote = await Quote.findById(quote._id).populate('customer');
-    console.log('Populated quote:', populatedQuote);
+    await quote.populate('customer');
+    console.log('Quote populated:', quote);
 
-    return NextResponse.json(populatedQuote, { status: 201 });
+    const response: ApiResponse<QuoteType> = { data: quote };
+    return NextResponse.json(response, { status: 201 });
   } catch (error) {
     console.error('Error creating quote:', error);
-    return NextResponse.json({ 
-      error: 'Failed to create quote', 
-      details: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const response: ApiResponse<never> = {
+      error: `Failed to create quote: ${errorMessage}`,
+    };
+    return NextResponse.json(response, { status: 500 });
   }
 }

@@ -2,18 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ICustomer } from '@/models';
+import { Customer } from '@/types';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { AddressField } from '@/components/ui/AddressField';
 
 export default function CustomerDetails({ params }: { params: { id: string } }) {
-  const [customer, setCustomer] = useState<ICustomer | null>(null);
+  const [customer, setCustomer] = useState<Customer | null>(null);
+  const [editedCustomer, setEditedCustomer] = useState<Customer | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const [editedCustomer, setEditedCustomer] = useState<ICustomer | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -24,8 +24,8 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
           throw new Error('Failed to fetch customer');
         }
         const data = await response.json();
-        setCustomer(data);
-        setEditedCustomer(data);
+        setCustomer(data.data);
+        setEditedCustomer(data.data);
       } catch (err) {
         setError('Failed to load customer. Please try again later.');
         console.error('Error fetching customer:', err);
@@ -63,7 +63,7 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
       }
 
       const updatedCustomer = await response.json();
-      setCustomer(updatedCustomer);
+      setCustomer(updatedCustomer.data);
       setIsEditing(false);
     } catch (err) {
       console.error('Error updating customer:', err);
@@ -77,11 +77,9 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
         const response = await fetch(`/api/customers/${params.id}`, {
           method: 'DELETE',
         });
-
         if (!response.ok) {
           throw new Error('Failed to delete customer');
         }
-
         router.push('/customers');
       } catch (err) {
         console.error('Error deleting customer:', err);
@@ -95,15 +93,15 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
     setEditedCustomer({
       ...editedCustomer,
       [e.target.name]: e.target.value,
-    } as ICustomer);
+    });
   };
 
   const handleAddressChange = (value: string) => {
     if (!editedCustomer) return;
     setEditedCustomer({
       ...editedCustomer,
-      address: value,
-    } as ICustomer);
+      installAddress: value,
+    });
   };
 
   if (isLoading) return <p>Loading...</p>;
@@ -153,10 +151,10 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
               />
             </div>
             <AddressField
-              value={editedCustomer?.address || ''}
+              value={editedCustomer?.installAddress || ''}
               onChange={handleAddressChange}
-              label="Address"
-              placeholder="Enter customer's address"
+              label="Installation Address"
+              placeholder="Enter customer's installation address"
             />
             <div className="flex justify-between">
               <Button type="button" onClick={handleCancelEdit} variant="secondary">
@@ -170,7 +168,7 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
             <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
             <p><strong>Email:</strong> {customer.email}</p>
             <p><strong>Phone:</strong> {customer.phoneNumber}</p>
-            <p><strong>Address:</strong> {customer.address}</p>
+            <p><strong>Installation Address:</strong> {customer.installAddress}</p>
             <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
             <div className="mt-6 flex justify-between">
               <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />

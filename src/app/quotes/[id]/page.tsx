@@ -1,12 +1,10 @@
+// src/app/quotes/[id]/page.tsx
+
 import React from 'react';
 import { QuoteProvider } from '@/contexts/QuoteContext';
 import QuoteDetails from '@/components/QuoteDetails';
 
-interface QuotePageProps {
-  params: { id: string };
-}
-
-const QuotePage: React.FC<QuotePageProps> = ({ params }) => {
+export default function QuotePage({ params }: { params: { id: string } }) {
   return (
     <QuoteProvider>
       <div className="max-w-4xl mx-auto py-8">
@@ -15,6 +13,4 @@ const QuotePage: React.FC<QuotePageProps> = ({ params }) => {
       </div>
     </QuoteProvider>
   );
-};
-
-export default QuotePage;
+}

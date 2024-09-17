@@ -1,16 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-
-interface Customer {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  mobilityAids: string[];
-}
+import { Customer } from '@/types';
 
 interface CustomerSearchProps {
   onSelectCustomer: (customer: Customer) => void;
@@ -70,7 +61,7 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => 
             >
               <div>{customer.firstName} {customer.lastName}</div>
               <div className="text-sm text-gray-600">{customer.email}</div>
-              <div className="text-sm text-gray-600">{customer.address}</div>
+              <div className="text-sm text-gray-600">{customer.installAddress}</div>
             </li>
           ))}
         </ul>

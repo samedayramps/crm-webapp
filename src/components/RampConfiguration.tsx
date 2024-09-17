@@ -1,13 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-
-interface RampComponent {
-  id: string;
-  name: string;
-  quantity: number;
-  price: number;
-}
+import { RampComponent } from '@/types';
 
 const componentTypes = [
   'Select a component',

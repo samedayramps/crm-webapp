@@ -1,8 +1,9 @@
-'use client';  // Add this line at the top of the file
+'use client';
 
 import React from 'react';
 import Link from 'next/link';
 import { useQuoteContext } from '@/contexts/QuoteContext';
+import { Quote } from '@/types';
 
 const QuoteList: React.FC = () => {
   const { quotes, loading, error } = useQuoteContext();
@@ -33,9 +34,11 @@ const QuoteList: React.FC = () => {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {quotes.map((quote) => (
+          {quotes.map((quote: Quote) => (
             <tr key={quote._id}>
-              <td className="px-6 py-4 whitespace-nowrap">{quote.customer.firstName} {quote.customer.lastName}</td>
+              <td className="px-6 py-4 whitespace-nowrap">
+                {quote.customer ? `${quote.customer.firstName} ${quote.customer.lastName}` : 'N/A'}
+              </td>
               <td className="px-6 py-4 whitespace-nowrap">${quote.totalPrice.toFixed(2)}</td>
               <td className="px-6 py-4 whitespace-nowrap">{quote.status}</td>
               <td className="px-6 py-4 whitespace-nowrap">{new Date(quote.createdAt).toLocaleDateString()}</td>

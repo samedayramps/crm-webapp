@@ -5,7 +5,7 @@ const CustomerSchema = new mongoose.Schema({
   lastName: { type: String, required: true },
   email: { type: String, required: true, unique: true },
   phoneNumber: { type: String, required: true },
-  address: { type: String, required: true },
+  installAddress: { type: String, required: true }, // Changed from 'address' to 'installAddress'
   mobilityAids: [{ type: String }],
 });
 

@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/Button';
 
 const CreateQuoteButton: React.FC = () => {
   const router = useRouter();
@@ -11,12 +12,9 @@ const CreateQuoteButton: React.FC = () => {
   };
 
   return (
-    <button
-      onClick={handleClick}
-      className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-    >
+    <Button onClick={handleClick}>
       Create New Quote
-    </button>
+    </Button>
   );
 };
 

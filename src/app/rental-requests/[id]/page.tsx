@@ -3,14 +3,12 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ActionButton } from '@/components/ui/ActionButton';
-import { EditRentalRequestForm } from '@/components/RentalRequestForm/EditRentalRequestForm';
-import { IRentalRequest } from '@/models'; // Import the interface from models
+import { IRentalRequest } from '@/models';
 
 export default function RentalRequestDetails({ params }: { params: { id: string } }) {
   const [request, setRequest] = useState<IRentalRequest | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -32,35 +30,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
 
     fetchRentalRequest();
   }, [params.id]);
-
-  const handleEdit = () => {
-    setIsEditing(true);
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-  };
-
-  const handleUpdate = async (updatedData: IRentalRequest) => {
-    try {
-      const response = await fetch(`/api/rental-requests/${params.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updatedData),
-      });
-      if (!response.ok) {
-        throw new Error('Failed to update rental request');
-      }
-      const updatedRequest = await response.json();
-      setRequest(updatedRequest);
-      setIsEditing(false);
-    } catch (err) {
-      console.error('Error updating rental request:', err);
-      alert('Failed to update rental request. Please try again.');
-    }
-  };
 
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this rental request?')) {
@@ -102,8 +71,13 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
         throw new Error('Failed to create customer');
       }
 
-      const customer = await response.json();
-      router.push(`/customers/${customer._id}`);
+      const result = await response.json();
+      console.log('Customer creation response:', result);
+      if (result.data && result.data.id) {
+        router.push(`/customers/${result.data.id}`);
+      } else {
+        throw new Error('Customer ID not returned from server');
+      }
     } catch (err) {
       console.error('Error creating customer:', err);
       alert('Failed to create customer. Please try again.');
@@ -113,19 +87,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
   if (isLoading) return <p>Loading...</p>;
   if (error) return <p className="text-red-500">{error}</p>;
   if (!request) return <p>Rental request not found.</p>;
-
-  if (isEditing) {
-    return (
-      <div className="max-w-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold mb-6">Edit Rental Request</h1>
-        <EditRentalRequestForm
-          initialData={request}
-          onSubmit={handleUpdate}
-          onCancel={handleCancelEdit}
-        />
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
@@ -142,7 +103,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
         <p><strong>Submitted:</strong> {new Date(request.createdAt).toLocaleString()}</p>
       </div>
       <div className="flex justify-between mt-6">
-        <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
         <ActionButton onClick={handleCreateCustomer} label="Create Customer" variant="default" />
         <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
       </div>

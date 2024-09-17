@@ -1,36 +1,44 @@
-'use client';
+"use client";
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuoteContext } from '@/contexts/QuoteContext';
-import { Quote } from '@/types/quote';
+import { Quote } from '@/types';
+import { api } from '@/utils/api';
 
 interface QuoteDetailsProps {
   id: string;
 }
 
 const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
-  const { getQuote, updateQuote, deleteQuote } = useQuoteContext();
+  const { updateQuote, deleteQuote } = useQuoteContext();
   const [isEditing, setIsEditing] = useState(false);
   const [editedQuote, setEditedQuote] = useState<Quote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
     const fetchQuote = async () => {
       setIsLoading(true);
-      const quote = await getQuote(id);
-      if (quote) {
-        setEditedQuote(quote);
+      const response = await api.get<Quote>(`/quotes/${id}`);
+      if (response.data) {
+        setEditedQuote(response.data);
+      } else if (response.error) {
+        setError(response.error);
       }
       setIsLoading(false);
     };
 
     fetchQuote();
-  }, [id, getQuote]);
+  }, [id]);
 
   if (isLoading) {
     return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error: {error}</div>;
   }
 
   if (!editedQuote) {
@@ -43,15 +51,23 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 
   const handleSave = async () => {
     if (editedQuote) {
-      await updateQuote(id, editedQuote);
-      setIsEditing(false);
+      const response = await updateQuote(id, editedQuote);
+      if (response.error) {
+        setError(response.error);
+      } else {
+        setIsEditing(false);
+      }
     }
   };
 
   const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this quote?')) {
-      await deleteQuote(id);
-      router.push('/quotes');
+      const response = await deleteQuote(id);
+      if (response.error) {
+        setError(response.error);
+      } else {
+        router.push('/quotes');
+      }
     }
   };
 
@@ -59,6 +75,10 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
     const { name, value } = e.target;
     setEditedQuote(prev => prev ? { ...prev, [name]: value } : null);
   };
+
+  const customerName = editedQuote.customer
+    ? `${editedQuote.customer.firstName} ${editedQuote.customer.lastName}`
+    : 'N/A';
 
   return (
     <div className="bg-white shadow overflow-hidden sm:rounded-lg">
@@ -74,13 +94,13 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
                 <input
                   type="text"
                   name="customerName"
-                  value={`${editedQuote.customer.firstName} ${editedQuote.customer.lastName}`}
+                  value={customerName}
                   onChange={handleChange}
                   className="w-full p-2 border rounded"
                   disabled
                 />
               ) : (
-                `${editedQuote.customer.firstName} ${editedQuote.customer.lastName}`
+                customerName
               )}
             </dd>
           </div>

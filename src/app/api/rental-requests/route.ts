@@ -1,31 +1,41 @@
+// src/app/api/rental-requests/route.ts
+
 import { NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest } from '@/models';
+import { ApiResponse, RentalRequest as RentalRequestType } from '@/types';
 
 export async function POST(request: Request) {
-	await dbConnect();
+  await dbConnect();
 
-	try {
-		const data = await request.json();
-		const rentalRequest = await RentalRequest.create(data);
-		return NextResponse.json({ message: 'Rental request submitted successfully', id: rentalRequest._id }, { status: 201 });
-	} catch (error) {
-		console.error('Error creating rental request:', error);
-		return NextResponse.json({ error: 'Failed to create rental request' }, { status: 500 });
-	}
+  try {
+    const data = await request.json();
+    const rentalRequest = await RentalRequest.create(data);
+    const response: ApiResponse<{ id: string }> = {
+      data: { id: rentalRequest._id.toString() },
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating rental request:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to create rental request',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
 }
 
 export async function GET() {
-	await dbConnect();
+  await dbConnect();
 
-	try {
-		const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-		return NextResponse.json(rentalRequests);
-	} catch (error) {
-		console.error('Error in GET /api/rental-requests:', error);
-		return NextResponse.json(
-			{ error: 'Failed to fetch rental requests', details: (error as Error).message },
-			{ status: 500 }
-		);
-	}
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch rental requests',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
 }

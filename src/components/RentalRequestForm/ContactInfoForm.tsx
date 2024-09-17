@@ -1,27 +1,20 @@
+// src/components/RentalRequestForm/ContactInfoForm.tsx
+
 import React from 'react';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { FormattedPhoneInput } from '@/components/ui/FormattedPhoneInput';
+import { RentalRequest } from '@/types';
 
 interface ContactInfoFormProps {
-  formData: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-  };
-  errors: Partial<{
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-  }>;
-  onChange: (name: string, value: string) => void;
+  values: Partial<RentalRequest>;
+  errors: { [key: string]: string };
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onNextPage: () => void;
 }
 
 export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
-  formData,
+  values,
   errors,
   onChange,
   onNextPage,
@@ -34,8 +27,9 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <label htmlFor="firstName" className="block text-sm font-medium">First Name</label>
           <Input
             id="firstName"
-            value={formData.firstName}
-            onChange={(e) => onChange('firstName', e.target.value)}
+            name="firstName"
+            value={values.firstName || ''}
+            onChange={onChange}
             error={errors.firstName}
             className="mt-1"
           />
@@ -44,8 +38,9 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <label htmlFor="lastName" className="block text-sm font-medium">Last Name</label>
           <Input
             id="lastName"
-            value={formData.lastName}
-            onChange={(e) => onChange('lastName', e.target.value)}
+            name="lastName"
+            value={values.lastName || ''}
+            onChange={onChange}
             error={errors.lastName}
             className="mt-1"
           />
@@ -54,9 +49,10 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
           <label htmlFor="email" className="block text-sm font-medium">Email Address</label>
           <Input
             id="email"
+            name="email"
             type="email"
-            value={formData.email}
-            onChange={(e) => onChange('email', e.target.value)}
+            value={values.email || ''}
+            onChange={onChange}
             error={errors.email}
             className="mt-1"
           />
@@ -64,8 +60,8 @@ export const ContactInfoForm: React.FC<ContactInfoFormProps> = ({
         <div>
           <label htmlFor="phone" className="block text-sm font-medium">Phone Number</label>
           <FormattedPhoneInput
-            value={formData.phone}
-            onChange={(value) => onChange('phone', value)}
+            value={values.phone || ''}
+            onChange={(value) => onChange({ target: { name: 'phone', value } } as React.ChangeEvent<HTMLInputElement>)}
             error={errors.phone}
             className="mt-1"
           />

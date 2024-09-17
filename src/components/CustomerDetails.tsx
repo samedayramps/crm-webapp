@@ -1,101 +1,138 @@
-'use client';
+"use client"
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-
-interface Customer {
-  _id: string;
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  mobilityAids: string[];
-}
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Customer } from '@/types';
+import { api } from '@/utils/api';
+import { ActionButton } from '@/components/ui/ActionButton';
+import { Input } from '@/components/ui/Input';
+import { Button } from '@/components/ui/Button';
+import { AddressField } from '@/components/ui/AddressField';
 
 interface CustomerDetailsProps {
-  id: string;
+  customer: Customer;
+  showActions?: boolean;
+  onCustomerUpdate?: (updatedCustomer: Customer) => void;
 }
 
-const CustomerDetails: React.FC<CustomerDetailsProps> = ({ id }) => {
-  const [customer, setCustomer] = useState<Customer | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+const CustomerDetails: React.FC<CustomerDetailsProps> = ({ customer, showActions = false, onCustomerUpdate }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedCustomer, setEditedCustomer] = useState<Customer>(customer);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-  useEffect(() => {
-    const fetchCustomer = async () => {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const response = await fetch(`/api/customers/${id}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch customer');
-        }
-        const data = await response.json();
-        setCustomer(data);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
-      } finally {
-        setIsLoading(false);
+  const handleEdit = () => setIsEditing(true);
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+    setEditedCustomer(customer);
+  };
+
+  const handleSaveEdit = async () => {
+    const response = await api.put<Customer>(`/customers/${customer._id}`, editedCustomer);
+    if (response.data) {
+      setIsEditing(false);
+      if (onCustomerUpdate) {
+        onCustomerUpdate(response.data);
       }
-    };
+    } else if (response.error) {
+      setError(response.error);
+    }
+  };
 
-    fetchCustomer();
-  }, [id]);
+  const handleDelete = async () => {
+    if (confirm('Are you sure you want to delete this customer?')) {
+      const response = await api.delete<void>(`/customers/${customer._id}`);
+      if (!response.error) {
+        router.push('/customers');
+      } else {
+        setError(response.error);
+      }
+    }
+  };
 
-  if (isLoading) {
-    return <div>Loading...</div>;
-  }
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setEditedCustomer({
+      ...editedCustomer,
+      [e.target.name]: e.target.value,
+    });
+  };
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
-
-  if (!customer) {
-    return <div>No customer found</div>;
-  }
+  const handleAddressChange = (value: string) => {
+    setEditedCustomer({
+      ...editedCustomer,
+      installAddress: value,
+    });
+  };
 
   return (
-    <div className="bg-white shadow overflow-hidden sm:rounded-lg">
-      <div className="px-4 py-5 sm:px-6">
-        <h3 className="text-lg leading-6 font-medium text-gray-900">Customer Details</h3>
-      </div>
-      <div className="border-t border-gray-200">
-        <dl>
-          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Full name</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {customer.firstName} {customer.lastName}
-            </dd>
+    <div className="bg-white shadow-md rounded-lg p-6">
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+      {isEditing ? (
+        <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-4">
+          <div>
+            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+            <Input
+              id="firstName"
+              name="firstName"
+              value={editedCustomer.firstName}
+              onChange={handleInputChange}
+            />
           </div>
-          <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Email address</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{customer.email}</dd>
+          <div>
+            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+            <Input
+              id="lastName"
+              name="lastName"
+              value={editedCustomer.lastName}
+              onChange={handleInputChange}
+            />
           </div>
-          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Phone number</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{customer.phoneNumber}</dd>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+            <Input
+              id="email"
+              name="email"
+              value={editedCustomer.email}
+              onChange={handleInputChange}
+            />
           </div>
-          <div className="bg-white px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Address</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">{customer.address}</dd>
+          <div>
+            <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">Phone Number</label>
+            <Input
+              id="phoneNumber"
+              name="phoneNumber"
+              value={editedCustomer.phoneNumber}
+              onChange={handleInputChange}
+            />
           </div>
-          <div className="bg-gray-50 px-4 py-5 sm:grid sm:grid-cols-3 sm:gap-4 sm:px-6">
-            <dt className="text-sm font-medium text-gray-500">Mobility Aids</dt>
-            <dd className="mt-1 text-sm text-gray-900 sm:mt-0 sm:col-span-2">
-              {customer.mobilityAids.join(', ') || 'None'}
-            </dd>
+          <AddressField
+            value={editedCustomer.installAddress || ''}
+            onChange={handleAddressChange}
+            label="Install Address"
+            placeholder="Enter customer's install address"
+          />
+          <div className="flex justify-between">
+            <Button type="button" onClick={handleCancelEdit} variant="secondary">
+              Cancel
+            </Button>
+            <Button type="submit">Save Changes</Button>
           </div>
-        </dl>
-      </div>
-      <div className="px-4 py-3 bg-gray-50 text-right sm:px-6">
-        <Link 
-          href={`/quotes/new?customerId=${customer._id}`}
-          className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-        >
-          Create Quote
-        </Link>
-      </div>
+        </form>
+      ) : (
+        <>
+          <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
+          <p><strong>Email:</strong> {customer.email}</p>
+          <p><strong>Phone:</strong> {customer.phoneNumber}</p>
+          <p><strong>Install Address:</strong> {customer.installAddress || 'Not provided'}</p>
+          <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
+          {showActions && (
+            <div className="mt-6 flex justify-between">
+              <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
+              <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 };
