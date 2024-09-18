@@ -1,39 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RentalRequest } from '@/models';
-import { RentalRequest as RentalRequestCreateRequest } from '@/types';
 
 export async function OPTIONS() {
   return new NextResponse(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      'Access-Control-Allow-Methods': '*',
+      'Access-Control-Allow-Headers': '*',
+      'Access-Control-Allow-Credentials': 'true',
     },
   });
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const body: RentalRequestCreateRequest = await request.json();
+    const body = await request.json();
     console.log('Received body:', body);
 
-    // Basic validation
-    if (!body.firstName || !body.lastName || !body.email || !body.phone) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
-    // Create a new rental request
+    // Create a new rental request without validation
     const newRentalRequest = await RentalRequest.create(body);
     
     const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
     response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
     return response;
   } catch (error) {
     console.error('Error in POST /api/rental-requests:', error);
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     const response = NextResponse.json({ error: errorMessage }, { status: 500 });
     response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
     return response;
   }
 }

@@ -177,10 +177,9 @@ const nextConfig = {
       {
         source: '/api/:path*',
         headers: [
-          { key: 'Access-Control-Allow-Credentials', value: 'true' },
-          { key: 'Access-Control-Allow-Origin', value: '*' }, // This will be overwritten by our CORS middleware
-          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT,OPTIONS' },
-          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,POST,OPTIONS' },
+          { key: 'Access-Control-Allow-Headers', value: 'Content-Type, Authorization' },
         ],
       },
     ];
@@ -1133,6 +1132,90 @@ export const allowedOrigins = [
     'https://app.samedayramps.com',
     'http://localhost:3000'  // Include this for local development
   ];
+```
+
+# src/app/page.tsx
+
+```tsx
+import React from 'react';
+import Link from 'next/link';
+
+export default function Home() {
+  return (
+    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <h1 className="text-4xl font-bold mb-8">Welcome to Wheelchair Ramp Rental</h1>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <Link href="/rental-requests/new" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
+          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">New Rental Request</h5>
+          <p className="font-normal text-gray-700">Submit a new request for a wheelchair ramp rental.</p>
+        </Link>
+        <Link href="/quotes" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
+          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">View Quotes</h5>
+          <p className="font-normal text-gray-700">Check and manage existing quotes.</p>
+        </Link>
+        <Link href="/customers" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
+          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">Customer List</h5>
+          <p className="font-normal text-gray-700">View and manage customer information.</p>
+        </Link>
+      </div>
+    </div>
+  );
+}
+```
+
+# src/app/layout.tsx
+
+```tsx
+'use client';
+
+import React from 'react';
+import { SessionProvider } from "next-auth/react";
+import Header from '@/components/Header';
+import { QuoteProvider } from '@/contexts/QuoteContext';
+import '@/styles/globals.css';
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <html lang="en">
+      <body className="bg-gray-100 min-h-screen">
+        <SessionProvider>
+          <QuoteProvider>
+            <Header />
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <main className="py-6">
+                {children}
+              </main>
+            </div>
+          </QuoteProvider>
+        </SessionProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+# src/app/favicon.ico
+
+This is a binary file of the type: Binary
+
+# src/app/_app.tsx
+
+```tsx
+import { SessionProvider } from "next-auth/react"
+import type { AppProps } from "next/app"
+import '@/styles/globals.css'
+
+export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
+  return (
+    <SessionProvider session={session}>
+      <Component {...pageProps} />
+    </SessionProvider>
+  )
+}
 ```
 
 # src/components/SessionWrapper.tsx
@@ -2339,87 +2422,224 @@ const CreateQuoteButton: React.FC = () => {
 export default CreateQuoteButton;
 ```
 
-# src/app/page.tsx
+# src/app/settings/page.tsx
 
 ```tsx
-import React from 'react';
-import Link from 'next/link';
+'use client';
 
-export default function Home() {
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
+
+const SettingsPage: React.FC = () => {
   return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <h1 className="text-4xl font-bold mb-8">Welcome to Wheelchair Ramp Rental</h1>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Link href="/rental-requests/new" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
-          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">New Rental Request</h5>
-          <p className="font-normal text-gray-700">Submit a new request for a wheelchair ramp rental.</p>
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
+    </div>
+  );
+};
+
+export default SettingsPage;
+```
+
+# src/app/quotes/page.tsx
+
+```tsx
+// src/app/quotes/page.tsx
+
+import React from 'react';
+import QuoteLayout from '@/components/QuoteLayout';
+import QuoteList from '@/components/QuoteList';
+import CreateQuoteButton from '@/components/CreateQuoteButton';
+
+export default function Quotes() {
+  return (
+    <QuoteLayout>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Quotes</h1>
+          <CreateQuoteButton />
+        </div>
+        <QuoteList />
+      </div>
+    </QuoteLayout>
+  );
+}
+```
+
+# src/app/rental-requests/page.tsx
+
+```tsx
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Button } from '@/components/ui/Button';
+import { api } from '@/utils/api';
+import { RentalRequest } from '@/types';
+
+const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
+  <div className="bg-white shadow-md rounded-lg p-6 mb-4">
+    <h3 className="text-lg font-semibold mb-2">{request.firstName} {request.lastName}</h3>
+    <p className="text-sm text-gray-600 mb-1">Email: {request.email}</p>
+    <p className="text-sm text-gray-600 mb-1">Phone: {request.phone}</p>
+    <p className="text-sm text-gray-600 mb-1">Installation: {request.installationTimeframe}</p>
+    <p className="text-sm text-gray-600 mb-1">Address: {request.installAddress}</p>
+    <p className="text-sm text-gray-600 mb-4">Submitted: {new Date(request.createdAt).toLocaleDateString()}</p>
+    <Link href={`/rental-requests/${request._id}`} passHref>
+      <Button variant="secondary" className="w-full">View Details</Button>
+    </Link>
+  </div>
+);
+
+const RentalRequestsPage = () => {
+  const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchRentalRequests = async () => {
+      try {
+        const response = await api.get<RentalRequest[]>('/rental-requests');
+        if (response.data) {
+          setRentalRequests(Array.isArray(response.data) ? response.data : []);
+        } else if (response.error) {
+          setError(response.error);
+        }
+      } catch (err) {
+        setError('Failed to load rental requests. Please try again later.');
+        console.error('Error fetching rental requests:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRentalRequests();
+  }, []);
+
+  return (
+    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
+      <div className="mb-6">
+        <Link href="/rental-requests/new" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+          New Rental Request
         </Link>
-        <Link href="/quotes" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
-          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">View Quotes</h5>
-          <p className="font-normal text-gray-700">Check and manage existing quotes.</p>
-        </Link>
-        <Link href="/customers" className="block p-6 bg-white rounded-lg border border-gray-200 shadow-md hover:bg-gray-100">
-          <h5 className="mb-2 text-2xl font-bold tracking-tight text-gray-900">Customer List</h5>
-          <p className="font-normal text-gray-700">View and manage customer information.</p>
-        </Link>
+      </div>
+      {isLoading ? (
+        <p>Loading rental requests...</p>
+      ) : error ? (
+        <p className="text-red-500">{error}</p>
+      ) : rentalRequests.length === 0 ? (
+        <p>No rental requests found.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {rentalRequests.map((request) => (
+            <RentalRequestCard key={request._id} request={request} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RentalRequestsPage;
+```
+
+# src/app/login/page.tsx
+
+```tsx
+'use client';
+
+import { useState } from 'react';
+import { signIn } from 'next-auth/react';
+import { useRouter } from 'next/navigation';
+
+export default function LoginPage() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    const result = await signIn('credentials', {
+      username,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError(result.error);
+    } else {
+      router.push('/');
+    }
+  };
+
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-100">
+      <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg">
+        <h3 className="text-2xl font-bold text-center">Login to your account</h3>
+        <form onSubmit={handleSubmit}>
+          <div className="mt-4">
+            <div>
+              <label className="block" htmlFor="username">Username</label>
+              <input
+                type="text"
+                placeholder="Username"
+                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                required
+              />
+            </div>
+            <div className="mt-4">
+              <label className="block" htmlFor="password">Password</label>
+              <input
+                type="password"
+                placeholder="Password"
+                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+            </div>
+            {error && <p className="text-red-500 mt-2">{error}</p>}
+            <div className="flex items-baseline justify-between">
+              <button className="px-6 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-900" type="submit">
+                Login
+              </button>
+            </div>
+          </div>
+        </form>
       </div>
     </div>
   );
 }
 ```
 
-# src/app/layout.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import { SessionProvider } from "next-auth/react";
-import Header from '@/components/Header';
-import { QuoteProvider } from '@/contexts/QuoteContext';
-import '@/styles/globals.css';
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  return (
-    <html lang="en">
-      <body className="bg-gray-100 min-h-screen">
-        <SessionProvider>
-          <QuoteProvider>
-            <Header />
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-              <main className="py-6">
-                {children}
-              </main>
-            </div>
-          </QuoteProvider>
-        </SessionProvider>
-      </body>
-    </html>
-  );
-}
-```
-
-# src/app/favicon.ico
+# src/app/fonts/GeistVF.woff
 
 This is a binary file of the type: Binary
 
-# src/app/_app.tsx
+# src/app/fonts/GeistMonoVF.woff
+
+This is a binary file of the type: Binary
+
+# src/app/customers/page.tsx
 
 ```tsx
-import { SessionProvider } from "next-auth/react"
-import type { AppProps } from "next/app"
-import '@/styles/globals.css'
+import React from 'react';
+import CustomerList from '@/components/CustomerList';
 
-export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
+export default function Customers() {
   return (
-    <SessionProvider session={session}>
-      <Component {...pageProps} />
-    </SessionProvider>
-  )
+    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold mb-6">Customers</h1>
+      <CustomerList />
+    </div>
+  );
 }
 ```
 
@@ -2761,26 +2981,6 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, vari
     {label}
   </Button>
 );
-```
-
-# src/app/settings/page.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import PricingVariables from '@/components/PricingVariables';
-
-const SettingsPage: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <PricingVariables />
-    </div>
-  );
-};
-
-export default SettingsPage;
 ```
 
 # src/components/RentalRequestForm/RentalRequestForm.tsx
@@ -3325,207 +3525,6 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
-# src/app/quotes/page.tsx
-
-```tsx
-// src/app/quotes/page.tsx
-
-import React from 'react';
-import QuoteLayout from '@/components/QuoteLayout';
-import QuoteList from '@/components/QuoteList';
-import CreateQuoteButton from '@/components/CreateQuoteButton';
-
-export default function Quotes() {
-  return (
-    <QuoteLayout>
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Quotes</h1>
-          <CreateQuoteButton />
-        </div>
-        <QuoteList />
-      </div>
-    </QuoteLayout>
-  );
-}
-```
-
-# src/app/rental-requests/page.tsx
-
-```tsx
-'use client';
-
-import React, { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/Button';
-import { api } from '@/utils/api';
-import { RentalRequest } from '@/types';
-
-const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
-  <div className="bg-white shadow-md rounded-lg p-6 mb-4">
-    <h3 className="text-lg font-semibold mb-2">{request.firstName} {request.lastName}</h3>
-    <p className="text-sm text-gray-600 mb-1">Email: {request.email}</p>
-    <p className="text-sm text-gray-600 mb-1">Phone: {request.phone}</p>
-    <p className="text-sm text-gray-600 mb-1">Installation: {request.installationTimeframe}</p>
-    <p className="text-sm text-gray-600 mb-1">Address: {request.installAddress}</p>
-    <p className="text-sm text-gray-600 mb-4">Submitted: {new Date(request.createdAt).toLocaleDateString()}</p>
-    <Link href={`/rental-requests/${request._id}`} passHref>
-      <Button variant="secondary" className="w-full">View Details</Button>
-    </Link>
-  </div>
-);
-
-const RentalRequestsPage = () => {
-  const [rentalRequests, setRentalRequests] = useState<RentalRequest[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchRentalRequests = async () => {
-      try {
-        const response = await api.get<RentalRequest[]>('/rental-requests');
-        if (response.data) {
-          setRentalRequests(Array.isArray(response.data) ? response.data : []);
-        } else if (response.error) {
-          setError(response.error);
-        }
-      } catch (err) {
-        setError('Failed to load rental requests. Please try again later.');
-        console.error('Error fetching rental requests:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchRentalRequests();
-  }, []);
-
-  return (
-    <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
-      <div className="mb-6">
-        <Link href="/rental-requests/new" className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
-          New Rental Request
-        </Link>
-      </div>
-      {isLoading ? (
-        <p>Loading rental requests...</p>
-      ) : error ? (
-        <p className="text-red-500">{error}</p>
-      ) : rentalRequests.length === 0 ? (
-        <p>No rental requests found.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {rentalRequests.map((request) => (
-            <RentalRequestCard key={request._id} request={request} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default RentalRequestsPage;
-```
-
-# src/app/login/page.tsx
-
-```tsx
-'use client';
-
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
-
-export default function LoginPage() {
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(null);
-
-    const result = await signIn('credentials', {
-      username,
-      password,
-      redirect: false,
-    });
-
-    if (result?.error) {
-      setError(result.error);
-    } else {
-      router.push('/');
-    }
-  };
-
-  return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-100">
-      <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg">
-        <h3 className="text-2xl font-bold text-center">Login to your account</h3>
-        <form onSubmit={handleSubmit}>
-          <div className="mt-4">
-            <div>
-              <label className="block" htmlFor="username">Username</label>
-              <input
-                type="text"
-                placeholder="Username"
-                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                required
-              />
-            </div>
-            <div className="mt-4">
-              <label className="block" htmlFor="password">Password</label>
-              <input
-                type="password"
-                placeholder="Password"
-                className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-              />
-            </div>
-            {error && <p className="text-red-500 mt-2">{error}</p>}
-            <div className="flex items-baseline justify-between">
-              <button className="px-6 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-900" type="submit">
-                Login
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
-```
-
-# src/app/fonts/GeistVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/customers/page.tsx
-
-```tsx
-import React from 'react';
-import CustomerList from '@/components/CustomerList';
-
-export default function Customers() {
-  return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Customers</h1>
-      <CustomerList />
-    </div>
-  );
-}
-```
-
 # src/app/quotes/new/page.tsx
 
 ```tsx
@@ -3660,6 +3659,48 @@ export default function QuotePage({ params }: { params: { id: string } }) {
 }
 ```
 
+# src/app/rental-requests/new/page.tsx
+
+```tsx
+'use client'; // Add this line to make it a Client Component
+
+import React from 'react';
+import RentalRequestForm from '@/components/RentalRequestForm/RentalRequestForm';
+import { RentalRequest } from '@/types';
+
+export default function NewRentalRequest() {
+  const handleSubmit = async (data: Omit<RentalRequest, '_id' | 'createdAt'>) => {
+    try {
+      const response = await fetch('/api/rental-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit rental request');
+      }
+
+      const result = await response.json();
+      console.log('Rental request submitted:', result);
+      // You can add a success message or redirect here
+    } catch (error) {
+      console.error('Error submitting rental request:', error);
+      // You can add an error message here
+    }
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-4">New Rental Request</h1>
+      <RentalRequestForm onSubmit={handleSubmit} />
+    </div>
+  );
+}
+```
+
 # src/app/rental-requests/[id]/page.tsx
 
 ```tsx
@@ -3774,272 +3815,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
     </div>
   );
 }
-```
-
-# src/app/rental-requests/new/page.tsx
-
-```tsx
-'use client'; // Add this line to make it a Client Component
-
-import React from 'react';
-import RentalRequestForm from '@/components/RentalRequestForm/RentalRequestForm';
-import { RentalRequest } from '@/types';
-
-export default function NewRentalRequest() {
-  const handleSubmit = async (data: Omit<RentalRequest, '_id' | 'createdAt'>) => {
-    try {
-      const response = await fetch('/api/rental-requests', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to submit rental request');
-      }
-
-      const result = await response.json();
-      console.log('Rental request submitted:', result);
-      // You can add a success message or redirect here
-    } catch (error) {
-      console.error('Error submitting rental request:', error);
-      // You can add an error message here
-    }
-  };
-
-  return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="text-2xl font-bold mb-4">New Rental Request</h1>
-      <RentalRequestForm onSubmit={handleSubmit} />
-    </div>
-  );
-}
-```
-
-# src/app/api/rental-requests/route.ts
-
-```ts
-import { NextRequest } from 'next/server';
-import { createApiHandler } from '@/lib/apiHandler';
-import { RentalRequest } from '@/models';
-import { RentalRequest as RentalRequestType, RentalRequestCreateRequest, ApiResponse } from '@/types';
-import { rateLimit } from '@/lib/rate-limit';
-import { corsMiddleware } from '@/lib/cors';
-
-const limiter = rateLimit(10, 60 * 1000); // 10 requests per minute
-
-export async function OPTIONS(req: NextRequest) {
-  return corsMiddleware(req);
-}
-
-export const POST = createApiHandler<RentalRequestType>(async (request: NextRequest): Promise<ApiResponse<RentalRequestType>> => {
-  // Apply rate limiting
-  if (!limiter.check(request, 'RENTAL_REQUEST_CREATE')) {
-    return { error: 'Rate limit exceeded' };
-  }
-
-  try {
-    const body: RentalRequestCreateRequest = await request.json();
-    console.log('Received body:', body);
-
-    // Basic validation
-    if (!body.firstName || !body.lastName || !body.email || !body.phone) {
-      return { error: 'Missing required fields' };
-    }
-
-    // Create a new rental request
-    const newRentalRequest = await RentalRequest.create(body);
-    return { data: newRentalRequest.toObject() };
-  } catch (error) {
-    console.error('Error creating rental request:', error);
-    return { error: 'Failed to create rental request' };
-  }
-});
-
-export const GET = createApiHandler<RentalRequestType[]>(async (): Promise<ApiResponse<RentalRequestType[]>> => {
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    return { data: rentalRequests.map(request => request.toObject()) };
-  } catch (error) {
-    console.error('Error fetching rental requests:', error);
-    return { error: 'Failed to fetch rental requests' };
-  }
-});
-```
-
-# src/app/api/settings/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Settings } from '@/models';
-import { Settings as SettingsType, SettingsUpdateRequest } from '@/types';
-import { NextRequest } from 'next/server';
-
-export const GET = createApiHandler<SettingsType>(async () => {
-  const settings = await Settings.findOne();
-  return { data: settings ? settings.toObject() : null };
-});
-
-export const POST = createApiHandler<SettingsType>(async (request: NextRequest) => {
-  const data: SettingsUpdateRequest = await request.json();
-  const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
-  return { data: settings.toObject() };
-});
-```
-
-# src/app/api/register/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { clientPromise } from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
-
-export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
-  const { username, email, password } = await request.json();
-
-  if (!username || !email || !password) {
-    throw new Error('Missing required fields');
-  }
-
-  const client = await clientPromise;
-  const db = client.db();
-
-  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-  if (existingUser) {
-    throw new Error('Username or email already exists');
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const result = await db.collection('users').insertOne({
-    username,
-    email,
-    password: hashedPassword,
-  });
-
-  return { 
-    data: { 
-      message: 'User registered successfully', 
-      userId: result.insertedId.toString() 
-    } 
-  };
-});
-```
-
-# src/app/api/quotes/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-import { Quote as QuoteType, QuoteCreateRequest } from '@/types';
-
-export const GET = createApiHandler<QuoteType[]>(async () => {
-  const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
-  return { data: quotes };
-});
-
-export const POST = createApiHandler<QuoteType>(async (request) => {
-  const data: QuoteCreateRequest = await request.json();
-  
-  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
-    throw new Error('Missing required fields');
-  }
-
-  const quote = await Quote.create(data);
-  const populatedQuote = await Quote.findById(quote._id).populate('customer');
-  
-  if (!populatedQuote) {
-    throw new Error('Failed to create quote');
-  }
-
-  return { data: populatedQuote };
-});
-```
-
-# src/app/api/send-quote/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-
-export const POST = createApiHandler<{ message: string }>(async (request) => {
-  const { quoteId } = await request.json();
-  const quote = await Quote.findById(quoteId).populate('customer');
-  
-  if (!quote) {
-    throw new Error('Quote not found');
-  }
-
-  // TODO: Implement email sending logic
-  // TODO: Implement Stripe payment link generation
-  // TODO: Implement esignatures.io agreement link generation
-
-  quote.status = 'SENT';
-  quote.sentAt = new Date();
-  await quote.save();
-
-  return { data: { message: 'Quote sent successfully' } };
-});
-```
-
-# src/app/api/customers/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType, CustomerCreateRequest } from '@/types';
-
-export const POST = createApiHandler<CustomerType>(async (request) => {
-  const data: CustomerCreateRequest = await request.json();
-  const customer = await Customer.create(data);
-  return { data: customer.toObject() };
-});
-
-export const GET = createApiHandler<CustomerType[]>(async () => {
-  const customers = await Customer.find().sort({ createdAt: -1 });
-  return { data: customers.map(customer => customer.toObject()) };
-});
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export const GET = createApiHandler<{ distance: number }>(async (request) => {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    throw new Error('Origin and destination are required');
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not set');
-  }
-
-  const response = await client.distancematrix({
-    params: {
-      origins: [origin],
-      destinations: [destination],
-      key: apiKey,
-    },
-  });
-
-  if (response.data.rows[0].elements[0].status !== 'OK') {
-    throw new Error('Unable to calculate distance');
-  }
-
-  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-  return { data: { distance } };
-});
 ```
 
 # src/app/customers/[id]/page.tsx
@@ -4227,6 +4002,238 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
     </div>
   );
 }
+```
+
+# src/app/api/settings/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Settings } from '@/models';
+import { Settings as SettingsType, SettingsUpdateRequest } from '@/types';
+import { NextRequest } from 'next/server';
+
+export const GET = createApiHandler<SettingsType>(async () => {
+  const settings = await Settings.findOne();
+  return { data: settings ? settings.toObject() : null };
+});
+
+export const POST = createApiHandler<SettingsType>(async (request: NextRequest) => {
+  const data: SettingsUpdateRequest = await request.json();
+  const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
+  return { data: settings.toObject() };
+});
+```
+
+# src/app/api/send-quote/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Quote } from '@/models';
+
+export const POST = createApiHandler<{ message: string }>(async (request) => {
+  const { quoteId } = await request.json();
+  const quote = await Quote.findById(quoteId).populate('customer');
+  
+  if (!quote) {
+    throw new Error('Quote not found');
+  }
+
+  // TODO: Implement email sending logic
+  // TODO: Implement Stripe payment link generation
+  // TODO: Implement esignatures.io agreement link generation
+
+  quote.status = 'SENT';
+  quote.sentAt = new Date();
+  await quote.save();
+
+  return { data: { message: 'Quote sent successfully' } };
+});
+```
+
+# src/app/api/rental-requests/route.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { RentalRequest } from '@/models';
+import { RentalRequest as RentalRequestCreateRequest } from '@/types';
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const body: RentalRequestCreateRequest = await request.json();
+    console.log('Received body:', body);
+
+    // Basic validation
+    if (!body.firstName || !body.lastName || !body.email || !body.phone) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    // Create a new rental request
+    const newRentalRequest = await RentalRequest.create(body);
+    
+    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
+  } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
+  }
+}
+
+export async function GET() {
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
+  }
+}
+```
+
+# src/app/api/register/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { clientPromise } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
+  const { username, email, password } = await request.json();
+
+  if (!username || !email || !password) {
+    throw new Error('Missing required fields');
+  }
+
+  const client = await clientPromise;
+  const db = client.db();
+
+  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+  if (existingUser) {
+    throw new Error('Username or email already exists');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const result = await db.collection('users').insertOne({
+    username,
+    email,
+    password: hashedPassword,
+  });
+
+  return { 
+    data: { 
+      message: 'User registered successfully', 
+      userId: result.insertedId.toString() 
+    } 
+  };
+});
+```
+
+# src/app/api/quotes/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Quote } from '@/models';
+import { Quote as QuoteType, QuoteCreateRequest } from '@/types';
+
+export const GET = createApiHandler<QuoteType[]>(async () => {
+  const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
+  return { data: quotes };
+});
+
+export const POST = createApiHandler<QuoteType>(async (request) => {
+  const data: QuoteCreateRequest = await request.json();
+  
+  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
+    throw new Error('Missing required fields');
+  }
+
+  const quote = await Quote.create(data);
+  const populatedQuote = await Quote.findById(quote._id).populate('customer');
+  
+  if (!populatedQuote) {
+    throw new Error('Failed to create quote');
+  }
+
+  return { data: populatedQuote };
+});
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export const GET = createApiHandler<{ distance: number }>(async (request) => {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    throw new Error('Origin and destination are required');
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_MAPS_API_KEY is not set');
+  }
+
+  const response = await client.distancematrix({
+    params: {
+      origins: [origin],
+      destinations: [destination],
+      key: apiKey,
+    },
+  });
+
+  if (response.data.rows[0].elements[0].status !== 'OK') {
+    throw new Error('Unable to calculate distance');
+  }
+
+  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+  return { data: { distance } };
+});
+```
+
+# src/app/api/customers/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Customer } from '@/models';
+import { Customer as CustomerType, CustomerCreateRequest } from '@/types';
+
+export const POST = createApiHandler<CustomerType>(async (request) => {
+  const data: CustomerCreateRequest = await request.json();
+  const customer = await Customer.create(data);
+  return { data: customer.toObject() };
+});
+
+export const GET = createApiHandler<CustomerType[]>(async () => {
+  const customers = await Customer.find().sort({ createdAt: -1 });
+  return { data: customers.map(customer => customer.toObject()) };
+});
 ```
 
 # src/app/api/rental-requests/[id]/route.ts
