@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest, IRentalRequest } from '@/models';
+import { allowedOrigins } from '@/config/cors';
 
 // Define the RentalRequestType
 type RentalRequestType = z.infer<typeof RentalRequestSchema>;
@@ -27,18 +28,27 @@ const RentalRequestSchema = z.object({
   installAddress: z.string(),
 });
 
-// Custom CORS function
-function setCORSHeaders(res: NextResponse): NextResponse {
-  res.headers.set('Access-Control-Allow-Origin', 'https://form.samedayramps.com');
+// Updated CORS function
+function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
+  const origin = req.headers.get('origin');
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+  } else {
+    // If the origin is not in the list, you might want to deny the request
+    // or set a default origin. Here we're setting it to the first allowed origin.
+    res.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  
   res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
   res.headers.set('Access-Control-Allow-Credentials', 'true');
   return res;
 }
 
-export async function OPTIONS() {
+export async function OPTIONS(req: NextRequest) {
   const res = new NextResponse(null, { status: 200 });
-  return setCORSHeaders(res);
+  return setCORSHeaders(req, res);
 }
 
 export async function POST(req: NextRequest) {
@@ -46,6 +56,8 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
+    console.log('Received body:', body);
+
     const validatedData = RentalRequestSchema.parse(body);
 
     // Save the validated data to the database
@@ -54,12 +66,14 @@ export async function POST(req: NextRequest) {
 
     const response: ApiResponse<RentalRequestType> = { data: validatedData };
     const res = NextResponse.json(response, { status: 201 });
-    return setCORSHeaders(res);
+    return setCORSHeaders(req, res);
   } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
     let response: ApiResponse<never>;
     let status: number;
 
     if (error instanceof z.ZodError) {
+      console.log('Validation errors:', error.errors);
       response = { error: JSON.stringify(error.errors) };
       status = 400;
     } else {
@@ -68,22 +82,22 @@ export async function POST(req: NextRequest) {
     }
 
     const res = NextResponse.json(response, { status });
-    return setCORSHeaders(res);
+    return setCORSHeaders(req, res);
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await dbConnect();
 
   try {
     const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
     const response: ApiResponse<IRentalRequest[]> = { data: rentalRequests };
     const res = NextResponse.json(response);
-    return setCORSHeaders(res);
+    return setCORSHeaders(req, res);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     const response: ApiResponse<never> = { error: errorMessage };
     const res = NextResponse.json(response, { status: 500 });
-    return setCORSHeaders(res);
+    return setCORSHeaders(req, res);
   }
 }
