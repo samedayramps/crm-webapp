@@ -1,28 +1,28 @@
 import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType, CustomerCreateRequest } from '@/types';
+import { CustomerService } from '@/services/customerService';
+import { Customer, CustomerCreateRequest, ApiResponse } from '@/types';
 
-export const GET = createApiHandler<CustomerType>(async (_request, { params }) => {
-  const customer = await Customer.findById(params.id);
+export const GET = createApiHandler<Customer>(async (_request, { params }): Promise<ApiResponse<Customer>> => {
+  const customer = await CustomerService.getCustomerById(params.id);
   if (!customer) {
-    throw new Error('Customer not found');
+    return { error: 'Customer not found' };
   }
-  return { data: customer.toObject() };
+  return { data: customer };
 });
 
-export const PUT = createApiHandler<CustomerType>(async (request, { params }) => {
+export const PUT = createApiHandler<Customer>(async (request, { params }): Promise<ApiResponse<Customer>> => {
   const data: CustomerCreateRequest = await request.json();
-  const customer = await Customer.findByIdAndUpdate(params.id, data, { new: true });
-  if (!customer) {
-    throw new Error('Customer not found');
+  const updatedCustomer = await CustomerService.updateCustomer(params.id, data);
+  if (!updatedCustomer) {
+    return { error: 'Customer not found' };
   }
-  return { data: customer.toObject() };
+  return { data: updatedCustomer };
 });
 
-export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }) => {
-  const customer = await Customer.findByIdAndDelete(params.id);
-  if (!customer) {
-    throw new Error('Customer not found');
+export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }): Promise<ApiResponse<{ message: string }>> => {
+  const result = await CustomerService.deleteCustomer(params.id);
+  if (!result) {
+    return { error: 'Customer not found' };
   }
   return { data: { message: 'Customer deleted successfully' } };
 });

@@ -1,25 +1,19 @@
 import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-import { Quote as QuoteType, QuoteCreateRequest } from '@/types';
+import { QuoteService } from '@/services/quoteService';
+import { Quote, QuoteCreateRequest } from '@/types';
 
-export const GET = createApiHandler<QuoteType[]>(async () => {
-  const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
+export const GET = createApiHandler<Quote[]>(async () => {
+  const quotes = await QuoteService.getAllQuotes();
   return { data: quotes };
 });
 
-export const POST = createApiHandler<QuoteType>(async (request) => {
+export const POST = createApiHandler<Quote>(async (request) => {
   const data: QuoteCreateRequest = await request.json();
   
   if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
     throw new Error('Missing required fields');
   }
 
-  const quote = await Quote.create(data);
-  const populatedQuote = await Quote.findById(quote._id).populate('customer');
-  
-  if (!populatedQuote) {
-    throw new Error('Failed to create quote');
-  }
-
-  return { data: populatedQuote };
+  const quote = await QuoteService.createQuote(data);
+  return { data: quote };
 });

@@ -1,8 +1,8 @@
 import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType } from '@/types';
+import { SearchService } from '@/services/searchService';
+import { Customer } from '@/types';
 
-export const GET = createApiHandler<CustomerType[]>(async (request) => {
+export const GET = createApiHandler<Customer[]>(async (request) => {
   const { searchParams } = new URL(request.url);
   const term = searchParams.get('term');
 
@@ -10,13 +10,6 @@ export const GET = createApiHandler<CustomerType[]>(async (request) => {
     throw new Error('Search term is required');
   }
 
-  const customers = await Customer.find({
-    $or: [
-      { firstName: { $regex: term, $options: 'i' } },
-      { lastName: { $regex: term, $options: 'i' } },
-      { email: { $regex: term, $options: 'i' } },
-    ]
-  }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
-
+  const customers = await SearchService.searchCustomers(term);
   return { data: customers };
 });

@@ -1,15 +1,15 @@
 import { createApiHandler } from '@/lib/apiHandler';
-import { Settings } from '@/models';
-import { Settings as SettingsType, SettingsUpdateRequest } from '@/types';
+import { SettingsService } from '@/services/settingsService';
+import { Settings, ApiResponse } from '@/types';
 import { NextRequest } from 'next/server';
 
-export const GET = createApiHandler<SettingsType>(async () => {
-  const settings = await Settings.findOne();
-  return { data: settings ? settings.toObject() : null };
+export const GET = createApiHandler<Settings>(async (): Promise<ApiResponse<Settings>> => {
+  const settings = await SettingsService.getSettings();
+  return settings ? { data: settings } : { error: 'Settings not found' };
 });
 
-export const POST = createApiHandler<SettingsType>(async (request: NextRequest) => {
-  const data: SettingsUpdateRequest = await request.json();
-  const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
-  return { data: settings.toObject() };
+export const POST = createApiHandler<Settings>(async (request: NextRequest): Promise<ApiResponse<Settings>> => {
+  const data = await request.json();
+  const settings = await SettingsService.updateSettings(data);
+  return { data: settings };
 });

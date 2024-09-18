@@ -1,36 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { RentalRequestService } from '@/services/rentalRequestService';
-import { corsMiddleware } from '@/lib/cors';
+import { RentalRequest } from '@/models';
 
-export const OPTIONS = corsMiddleware;
+const allowedOrigins = ['https://form.samedayramps.com', 'https://samedayramps.com'];
 
-export async function POST(request: NextRequest) {
-  return corsMiddleware(request, async () => {
-    try {
-      const body = await request.json();
-      console.log('Received body:', body);
-
-      const newRentalRequest = await RentalRequestService.createRentalRequest(body);
-      
-      return NextResponse.json({ data: newRentalRequest }, { status: 201 });
-    } catch (error) {
-      console.error('Error in POST /api/rental-requests:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
-    }
-  });
+function setHeaders(response: NextResponse, origin: string) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
 }
 
-export async function GET(request: NextRequest) {
-  return corsMiddleware(request, async () => {
-    try {
-      const rentalRequests = await RentalRequestService.getAllRentalRequests();
-      
-      return NextResponse.json({ data: rentalRequests }, { status: 200 });
-    } catch (error) {
-      console.error('Error in GET /api/rental-requests:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  if (allowedOrigins.includes(origin)) {
+    const response = new NextResponse(null, { status: 204 });
+    setHeaders(response, origin);
+    return response;
+  }
+  return new NextResponse(null, { status: 204 });
+}
+
+export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  try {
+    const body = await request.json();
+    console.log('Received body:', body);
+
+    // Create a new rental request without validation
+    const newRentalRequest = await RentalRequest.create(body);
+    
+    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
     }
-  });
+    
+    return response;
+  } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
 }
