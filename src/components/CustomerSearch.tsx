@@ -1,6 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchCustomers } from '@/store/customersSlice';
 import { Customer } from '@/types';
 
 interface CustomerSearchProps {
@@ -8,37 +10,39 @@ interface CustomerSearchProps {
 }
 
 const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => {
+  const dispatch = useAppDispatch();
+  const { customers, loading, error } = useAppSelector(state => state.customers);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const term = e.target.value;
-    setSearchTerm(term);
+  useEffect(() => {
+    dispatch(fetchCustomers());
+  }, [dispatch]);
 
-    if (term.length < 2) {
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      const filteredCustomers = customers.filter(customer =>
+        `${customer.firstName} ${customer.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setSearchResults(filteredCustomers);
+    } else {
       setSearchResults([]);
-      return;
     }
+  }, [searchTerm, customers]);
 
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/customers/search?term=${encodeURIComponent(term)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch customers');
-      }
-      const data = await response.json();
-      setSearchResults(data);
-    } catch (err) {
-      setError('An error occurred while searching for customers');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
   };
+
+  const handleSelectCustomer = (customer: Customer) => {
+    onSelectCustomer(customer);
+    setSearchTerm('');
+    setSearchResults([]);
+  };
+
+  if (loading) return <div>Loading customers...</div>;
+  if (error) return <div>Error: {error}</div>;
 
   return (
     <div className="mb-4">
@@ -49,15 +53,13 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => 
         onChange={handleSearch}
         className="w-full px-3 py-2 border rounded-md"
       />
-      {isLoading && <p>Loading...</p>}
-      {error && <p className="text-red-500">{error}</p>}
       {searchResults.length > 0 && (
         <ul className="mt-2 border rounded-md max-h-80 overflow-y-auto">
           {searchResults.map(customer => (
             <li 
               key={customer._id} 
               className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-              onClick={() => onSelectCustomer(customer)}
+              onClick={() => handleSelectCustomer(customer)}
             >
               <div className="font-semibold">{customer.firstName} {customer.lastName}</div>
               <div className="text-sm text-gray-600">{customer.email}</div>

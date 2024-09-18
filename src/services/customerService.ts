@@ -4,7 +4,11 @@ import { Customer, CustomerCreateRequest } from '@/types';
 export class CustomerService {
   static async createCustomer(data: CustomerCreateRequest): Promise<Customer> {
     try {
-      const customer = await CustomerModel.create(data);
+      const customerData = {
+        ...data,
+        mobilityAids: data.mobilityAids || []
+      };
+      const customer = await CustomerModel.create(customerData);
       return customer.toObject();
     } catch (error) {
       console.error('Error creating customer:', error);
@@ -34,7 +38,11 @@ export class CustomerService {
 
   static async updateCustomer(id: string, data: Partial<CustomerCreateRequest>): Promise<Customer | null> {
     try {
-      const customer = await CustomerModel.findByIdAndUpdate(id, data, { new: true });
+      const customerData = {
+        ...data,
+        mobilityAids: data.mobilityAids || []
+      };
+      const customer = await CustomerModel.findByIdAndUpdate(id, customerData, { new: true });
       return customer ? customer.toObject() : null;
     } catch (error) {
       console.error('Error updating customer:', error);

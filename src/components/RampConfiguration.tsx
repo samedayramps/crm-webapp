@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RampComponent } from '@/types';
 
 const componentTypes = [
@@ -38,58 +38,75 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({
   readOnly = false
 }) => {
   const [components, setComponents] = useState<RampComponent[]>(initialComponents);
-  const [totalLength, setTotalLength] = useState(0);
+  const [rampSectionLength, setRampSectionLength] = useState(0);
+  const [totalRampLength, setTotalRampLength] = useState(0);
+  const prevComponentsRef = useRef<RampComponent[]>([]);
 
-  const calculateTotalLength = useCallback(() => {
-    let length = 0;
+  const calculateLengths = useCallback(() => {
+    let sectionLength = 0;
+    let totalLength = 0;
     components.forEach(component => {
-      const match = component.name.match(/(\d+)ft/);
+      const match = component.name.match(/(\d+)(?:x(\d+))?\s*ft/);
       if (match) {
-        length += parseInt(match[1]) * component.quantity;
+        const length = parseInt(match[1]);
+        if (component.name.includes('landing')) {
+          totalLength += length * component.quantity;
+        } else {
+          sectionLength += length * component.quantity;
+          totalLength += length * component.quantity;
+        }
       }
     });
-    setTotalLength(length);
-    onConfigurationChange(components, length);
-  }, [components, onConfigurationChange]);
+    return { sectionLength, totalLength };
+  }, [components]);
 
   useEffect(() => {
-    calculateTotalLength();
-  }, [calculateTotalLength]);
+    const { sectionLength, totalLength } = calculateLengths();
+    setRampSectionLength(sectionLength);
+    setTotalRampLength(totalLength);
 
-  const handleComponentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (JSON.stringify(components) !== JSON.stringify(prevComponentsRef.current)) {
+      onConfigurationChange(components, totalLength);
+      prevComponentsRef.current = [...components];
+    }
+  }, [components, calculateLengths, onConfigurationChange]);
+
+  const handleComponentSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedComponent = e.target.value;
     if (selectedComponent !== 'Select a component') {
-      const existingComponent = components.find(comp => comp.name === selectedComponent);
-      if (existingComponent) {
-        updateQuantity(existingComponent.id, 1);
-      } else {
-        const newComponent: RampComponent = {
-          id: Date.now().toString(),
-          name: selectedComponent,
-          quantity: 1,
-          price: componentPrices[selectedComponent as keyof typeof componentPrices] || 0,
-        };
-        const updatedComponents = [...components, newComponent];
-        setComponents(updatedComponents);
-        onConfigurationChange(updatedComponents, totalLength);
-      }
-      e.target.value = 'Select a component'; // Reset dropdown to default option
+      setComponents(prevComponents => {
+        const existingComponent = prevComponents.find(comp => comp.name === selectedComponent);
+        if (existingComponent) {
+          return prevComponents.map(comp =>
+            comp.id === existingComponent.id
+              ? { ...comp, quantity: comp.quantity + 1 }
+              : comp
+          );
+        } else {
+          const newComponent: RampComponent = {
+            id: Date.now().toString(),
+            name: selectedComponent,
+            quantity: 1,
+            price: componentPrices[selectedComponent as keyof typeof componentPrices] || 0,
+          };
+          return [...prevComponents, newComponent];
+        }
+      });
+      e.target.value = 'Select a component';
     }
-  };
+  }, []);
 
-  const updateQuantity = (id: string, change: number) => {
-    const updatedComponents = components.map(component => 
-      component.id === id ? { ...component, quantity: Math.max(0, component.quantity + change) } : component
-    ).filter(component => component.quantity > 0);
-    setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents, totalLength);
-  };
+  const updateQuantity = useCallback((id: string, change: number) => {
+    setComponents(prevComponents => 
+      prevComponents.map(component => 
+        component.id === id ? { ...component, quantity: Math.max(0, component.quantity + change) } : component
+      ).filter(component => component.quantity > 0)
+    );
+  }, []);
 
-  const removeComponent = (id: string) => {
-    const updatedComponents = components.filter(component => component.id !== id);
-    setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents, totalLength);
-  };
+  const removeComponent = useCallback((id: string) => {
+    setComponents(prevComponents => prevComponents.filter(component => component.id !== id));
+  }, []);
 
   return (
     <div className="bg-white shadow-md rounded-lg p-4 mb-4">
@@ -147,6 +164,11 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({
           </ul>
         </div>
       )}
+
+      <div className="mt-4">
+        <p><strong>Ramp Section Length:</strong> {rampSectionLength} ft</p>
+        <p><strong>Total Ramp Length:</strong> {totalRampLength} ft</p>
+      </div>
     </div>
   );
 };

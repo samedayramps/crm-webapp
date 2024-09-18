@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuoteContext } from '@/contexts/QuoteContext';
-import { Quote } from '@/types';
+import { Quote, RampComponent } from '@/types';
 import { api } from '@/utils/api';
 import CustomerDetails from '@/components/CustomerDetails';
 import RampConfigurationV2 from '@/components/RampConfiguration';
@@ -36,21 +36,23 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
     fetchQuote();
   }, [id]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setIsEditing(true);
-  };
+  }, []);
 
-  const handleSave = async (updatedQuote: Quote) => {
-    const response = await updateQuote(id, updatedQuote);
+  const handleSave = useCallback(async () => {
+    if (!quote) return;
+
+    const response = await updateQuote(id, quote);
     if (response.error) {
       setError(response.error);
     } else {
       setQuote(response.data!);
       setIsEditing(false);
     }
-  };
+  }, [quote, id, updateQuote]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (window.confirm('Are you sure you want to delete this quote?')) {
       const response = await deleteQuote(id);
       if (response.error) {
@@ -59,6 +61,35 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
         router.push('/quotes');
       }
     }
+  }, [id, deleteQuote, router]);
+
+  const handleRampConfigurationChange = useCallback((components: RampComponent[]) => {
+    setQuote(prevQuote => {
+      if (!prevQuote) return null;
+      return {
+        ...prevQuote,
+        components: components,
+      };
+    });
+  }, []);
+
+  const handlePriceCalculated = useCallback((installPrice: number, deliveryPrice: number, monthlyRate: number) => {
+    setQuote(prevQuote => {
+      if (!prevQuote) return null;
+      return {
+        ...prevQuote,
+        installPrice,
+        deliveryPrice,
+        monthlyRate,
+      };
+    });
+  }, []);
+
+  const calculateTotalLength = (components: RampComponent[]): number => {
+    return components.reduce((total, component) => {
+      const match = component.name.match(/(\d+)ft/);
+      return total + (match ? parseInt(match[1]) * component.quantity : 0);
+    }, 0);
   };
 
   if (isLoading) {
@@ -88,7 +119,7 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 
       <div className="mb-6">
         <RampConfigurationV2 
-          onConfigurationChange={() => {}}
+          onConfigurationChange={handleRampConfigurationChange}
           initialComponents={quote.components}
           readOnly={!isEditing}
         />
@@ -97,12 +128,9 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
       <div className="mb-6">
         <PricingComponent 
           rampComponents={quote.components}
-          totalLength={quote.components.reduce((total, component) => {
-            const match = component.name.match(/(\d+)ft/);
-            return total + (match ? parseInt(match[1]) * component.quantity : 0);
-          }, 0)}
+          totalLength={calculateTotalLength(quote.components)}
           installAddress={typeof quote.customer !== 'string' ? quote.customer.installAddress || '' : ''}
-          onPriceCalculated={() => {}}
+          onPriceCalculated={handlePriceCalculated}
           initialInstallPrice={quote.installPrice}
           initialDeliveryPrice={quote.deliveryPrice}
           initialMonthlyRate={quote.monthlyRate}
@@ -120,7 +148,7 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
               Cancel
             </button>
             <button 
-              onClick={() => handleSave(quote)}
+              onClick={handleSave}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             >
               Save Changes

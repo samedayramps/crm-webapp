@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 
 export const GET = createApiHandler<Settings>(async (): Promise<ApiResponse<Settings>> => {
   const settings = await SettingsService.getSettings();
+  console.log('API - Fetched settings:', settings);
   return settings ? { data: settings } : { error: 'Settings not found' };
 });
 

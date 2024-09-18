@@ -10,8 +10,8 @@ export const GET = createApiHandler<Quote[]>(async () => {
 export const POST = createApiHandler<Quote>(async (request) => {
   const data: QuoteCreateRequest = await request.json();
   
-  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
-    throw new Error('Missing required fields');
+  if (!data.customer) {
+    throw new Error('Customer is required');
   }
 
   const quote = await QuoteService.createQuote(data);

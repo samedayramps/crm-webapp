@@ -169,7 +169,9 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
             <p><strong>Email:</strong> {customer.email}</p>
             <p><strong>Phone:</strong> {customer.phoneNumber}</p>
             <p><strong>Installation Address:</strong> {customer.installAddress}</p>
-            <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
+            <p>
+              <strong>Mobility Aids:</strong> {customer.mobilityAids?.join(', ') || 'None'}
+            </p>
             <div className="mt-6 flex justify-between">
               <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
               <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />

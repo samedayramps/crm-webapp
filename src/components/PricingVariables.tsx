@@ -104,6 +104,36 @@ const PricingVariables: React.FC = () => {
           min="0"
         />
       </div>
+
+      <div>
+        <label htmlFor="baseInstallFee" className="block text-sm font-medium text-gray-700">
+          Base Install Fee ($)
+        </label>
+        <Input
+          type="number"
+          id="baseInstallFee"
+          name="baseInstallFee"
+          value={formData.baseInstallFee}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="baseDeliveryFee" className="block text-sm font-medium text-gray-700">
+          Base Delivery Fee ($)
+        </label>
+        <Input
+          type="number"
+          id="baseDeliveryFee"
+          name="baseDeliveryFee"
+          value={formData.baseDeliveryFee}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
       
       {saveError && <div className="text-red-500">{saveError}</div>}
       

@@ -1,30 +1,20 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
-import { api } from '@/utils/api';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchCustomers } from '@/store/customersSlice';
 import { Customer } from '@/types';
 
 const CustomerList: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const { customers, loading, error } = useAppSelector(state => state.customers);
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      const response = await api.get<Customer[]>('/customers');
-      if (response.data) {
-        setCustomers(Array.isArray(response.data) ? response.data : []);
-      } else if (response.error) {
-        setError(response.error);
-      }
-      setIsLoading(false);
-    };
+    dispatch(fetchCustomers());
+  }, [dispatch]);
 
-    fetchCustomers();
-  }, []);
-
-  if (isLoading) return <div>Loading customers...</div>;
+  if (loading) return <div>Loading customers...</div>;
   if (error) return <div>Error: {error}</div>;
 
   return (
@@ -43,7 +33,7 @@ const CustomerList: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {customers.map((customer) => (
+            {customers.map((customer: Customer) => (
               <tr key={customer._id}>
                 <td className="px-6 py-4 whitespace-nowrap">{customer.firstName} {customer.lastName}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{customer.email}</td>

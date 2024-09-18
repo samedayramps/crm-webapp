@@ -9,7 +9,7 @@ export interface Customer {
   email: string;
   phoneNumber: string;
   installAddress?: string;
-  mobilityAids: string[];
+  mobilityAids: string[]; // Changed from optional to required, with an empty array as default
 }
 
 export interface CustomerCreateRequest {
@@ -88,6 +88,8 @@ export interface Settings {
   monthlyRatePerFt: number;
   installRatePerComponent: number;
   deliveryRatePerMile: number;
+  baseInstallFee: number;  // Add this line
+  baseDeliveryFee: number;  // Add this line
 }
 
 export interface SettingsUpdateRequest {
@@ -95,6 +97,8 @@ export interface SettingsUpdateRequest {
   monthlyRatePerFt?: number;
   installRatePerComponent?: number;
   deliveryRatePerMile?: number;
+  baseInstallFee?: number;  // Add this line
+  baseDeliveryFee?: number;  // Add this line
 }
 
 export interface ApiResponse<T> {

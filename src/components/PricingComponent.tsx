@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { usePricingVariables } from '@/hooks/usePricingVariables';
 import { useDistanceCalculation } from '@/hooks/useDistanceCalculation';
 import { RampComponent } from '@/types';
@@ -32,24 +32,26 @@ const PricingComponent: React.FC<PricingComponentProps> = ({
   const [deliveryPrice, setDeliveryPrice] = useState(initialDeliveryPrice || 0);
   const [monthlyRate, setMonthlyRate] = useState(initialMonthlyRate || 0);
 
-  useEffect(() => {
-    if (isPricingLoading || distance === null) return;
+  const calculatePrices = useCallback(() => {
+    if (isPricingLoading || distance === null || !pricingVariables) return;
 
-    const calculatePrices = () => {
-      const install = rampComponents.reduce((total, component) => 
-        total + (component.quantity * pricingVariables.installRatePerComponent), 0);
-      const delivery = distance * pricingVariables.deliveryRatePerMile;
-      const monthly = totalLength * pricingVariables.monthlyRatePerFt;
+    const install = pricingVariables.baseInstallFee + rampComponents.reduce((total, component) => 
+      total + (component.quantity * (pricingVariables.installRatePerComponent || 0)), 0);
+    const delivery = pricingVariables.baseDeliveryFee + (distance || 0) * (pricingVariables.deliveryRatePerMile || 0);
+    const monthly = totalLength * (pricingVariables.monthlyRatePerFt || 0);
 
-      setInstallPrice(Number(install.toFixed(2)));
-      setDeliveryPrice(Number(delivery.toFixed(2)));
-      setMonthlyRate(Number(monthly.toFixed(2)));
+    setInstallPrice(Number(install.toFixed(2)));
+    setDeliveryPrice(Number(delivery.toFixed(2)));
+    setMonthlyRate(Number(monthly.toFixed(2)));
 
+    if (!readOnly) {
       onPriceCalculated(install, delivery, monthly);
-    };
+    }
+  }, [rampComponents, totalLength, distance, pricingVariables, isPricingLoading, onPriceCalculated, readOnly]);
 
+  useEffect(() => {
     calculatePrices();
-  }, [rampComponents, totalLength, distance, pricingVariables, isPricingLoading, onPriceCalculated]);
+  }, [calculatePrices]);
 
   if (isPricingLoading) {
     return <div>Loading pricing information...</div>;
@@ -80,14 +82,6 @@ const PricingComponent: React.FC<PricingComponentProps> = ({
         <p>Delivery Price: ${deliveryPrice.toFixed(2)}</p>
         <p>Monthly Rate: ${monthlyRate.toFixed(2)}</p>
       </div>
-      {!readOnly && (
-        <button 
-          onClick={() => onPriceCalculated(installPrice, deliveryPrice, monthlyRate)}
-          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Update Pricing
-        </button>
-      )}
     </div>
   );
 };

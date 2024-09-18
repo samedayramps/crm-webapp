@@ -3,14 +3,16 @@
 ```json
 {
   "compilerOptions": {
+    "target": "es5",
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
+    "forceConsistentCasingInFileNames": true,
     "noEmit": true,
     "esModuleInterop": true,
     "module": "esnext",
-    "moduleResolution": "bundler",
+    "moduleResolution": "node",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
@@ -20,6 +22,7 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     }
@@ -27,7 +30,6 @@
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
   "exclude": ["node_modules"]
 }
-
 ```
 
 # tailwind.config.ts
@@ -118,6 +120,7 @@ module.exports = {
     "@prisma/client": "^5.19.1",
     "@radix-ui/react-checkbox": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.0",
+    "@reduxjs/toolkit": "^2.2.7",
     "@stripe/stripe-js": "^4.5.0",
     "@tailwindcss/forms": "^0.5.9",
     "@upstash/ratelimit": "^2.0.3",
@@ -136,6 +139,7 @@ module.exports = {
     "react": "^18",
     "react-dom": "^18",
     "react-hook-form": "^7.53.0",
+    "react-redux": "^9.1.2",
     "tailwind-merge": "^2.5.2",
     "zod": "^3.23.8"
   },
@@ -4775,53 +4779,12 @@ next-env.d.ts
 # src/middleware.ts
 
 ```ts
-import { withAuth } from "next-auth/middleware";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token;
-    const isAuth = !!token;
-    const isAuthPage = req.nextUrl.pathname.startsWith("/login");
-
-    if (isAuthPage) {
-      if (isAuth) {
-        return NextResponse.redirect(new URL("/", req.url));
-      }
-      return null;
-    }
-
-    if (!isAuth) {
-      let from = req.nextUrl.pathname;
-      if (req.nextUrl.search) {
-        from += req.nextUrl.search;
-      }
-
-      return NextResponse.redirect(
-        new URL(`/login?from=${encodeURIComponent(from)}`, req.url)
-      );
-    }
-
-    // Optional: Check for specific user role
-    // if (token?.role !== "admin") {
-    //   return new NextResponse("You are not authorized to access this page.", { status: 403 });
-    // }
-
-    console.log(`User authenticated. Accessing: ${req.nextUrl.pathname}`);
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => {
-        // This is called before the middleware function
-        // Return true to allow the request, false to deny
-        return !!token;
-      },
-    },
-    pages: {
-      signIn: "/login",
-    },
-  }
-);
+export function middleware(req: NextRequest) {
+  console.log(`Accessing: ${req.nextUrl.pathname}`);
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [
@@ -5055,29 +5018,324 @@ body {
 
 ```
 
+# src/services/settingsService.ts
+
+```ts
+import { Settings as SettingsModel } from '@/models';
+import { Settings, SettingsUpdateRequest } from '@/types';
+
+export class SettingsService {
+  static async getSettings(): Promise<Settings | null> {
+    try {
+      const settings = await SettingsModel.findOne();
+      return settings ? settings.toObject() : null;
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+      throw error;
+    }
+  }
+
+  static async updateSettings(data: SettingsUpdateRequest): Promise<Settings> {
+    try {
+      const settings = await SettingsModel.findOneAndUpdate({}, data, { new: true, upsert: true });
+      return settings.toObject();
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      throw error;
+    }
+  }
+}
+```
+
+# src/services/searchService.ts
+
+```ts
+import { CustomerService } from './customerService';
+import { Customer } from '@/types';
+
+export class SearchService {
+  static async searchCustomers(term: string): Promise<Customer[]> {
+    return CustomerService.searchCustomers(term);
+  }
+}
+```
+
+# src/services/rentalRequestService.ts
+
+```ts
+import { RentalRequest as RentalRequestModel } from '@/models';
+import { RentalRequest, RentalRequestCreateRequest } from '@/types';
+
+// Define an interface for the rental request data
+interface RentalRequestData {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  knowRampLength: string;
+  estimatedRampLength?: string;
+  knowRentalDuration: string;
+  estimatedRentalDuration?: string;
+  installationTimeframe: string;
+  mobilityAids: string[];
+  installAddress: string;
+}
+
+export class RentalRequestService {
+  static async createRentalRequest(data: RentalRequestCreateRequest): Promise<RentalRequest> {
+    try {
+      const newRentalRequest = await RentalRequestModel.create(data);
+      return newRentalRequest.toObject();
+    } catch (error) {
+      console.error('Error creating rental request:', error);
+      throw error;
+    }
+  }
+
+  static async getAllRentalRequests(): Promise<RentalRequest[]> {
+    try {
+      const rentalRequests = await RentalRequestModel.find().sort({ createdAt: -1 });
+      return rentalRequests.map(request => request.toObject());
+    } catch (error) {
+      console.error('Error fetching rental requests:', error);
+      throw error;
+    }
+  }
+
+  static async getRentalRequestById(id: string): Promise<RentalRequest | null> {
+    try {
+      const rentalRequest = await RentalRequestModel.findById(id);
+      return rentalRequest ? rentalRequest.toObject() : null;
+    } catch (error) {
+      console.error('Error fetching rental request:', error);
+      throw error;
+    }
+  }
+
+  static async updateRentalRequest(id: string, data: Partial<RentalRequestData>): Promise<RentalRequest | null> {
+    try {
+      const updatedRentalRequest = await RentalRequestModel.findByIdAndUpdate(id, data, { new: true });
+      return updatedRentalRequest ? updatedRentalRequest.toObject() : null;
+    } catch (error) {
+      console.error('Error updating rental request:', error);
+      throw error;
+    }
+  }
+
+  static async deleteRentalRequest(id: string): Promise<boolean> {
+    try {
+      const result = await RentalRequestModel.findByIdAndDelete(id);
+      return !!result;
+    } catch (error) {
+      console.error('Error deleting rental request:', error);
+      throw error;
+    }
+  }
+}
+```
+
+# src/services/quoteService.ts
+
+```ts
+import { Quote as QuoteModel } from '@/models';
+import { Document } from 'mongoose';
+import { Quote, QuoteCreateRequest } from '@/types';
+
+export class QuoteService {
+  static async createQuote(data: QuoteCreateRequest): Promise<Quote> {
+    try {
+      const quote = await QuoteModel.create(data);
+      const populatedQuote = await QuoteModel.findById(quote._id).populate('customer');
+      if (!populatedQuote) {
+        throw new Error('Failed to create quote');
+      }
+      return populatedQuote.toObject();
+    } catch (error) {
+      console.error('Error creating quote:', error);
+      throw error;
+    }
+  }
+
+  static async getAllQuotes(): Promise<Quote[]> {
+    try {
+      const quotes = await QuoteModel.find().populate('customer').sort({ createdAt: -1 });
+      return quotes.map((quote: Document) => quote.toObject());
+    } catch (error) {
+      console.error('Error fetching quotes:', error);
+      throw error;
+    }
+  }
+
+  static async getQuoteById(id: string): Promise<Quote | null> {
+    try {
+      const quote = await QuoteModel.findById(id).populate('customer');
+      return quote ? quote.toObject() : null;
+    } catch (error) {
+      console.error('Error fetching quote:', error);
+      throw error;
+    }
+  }
+
+  static async updateQuote(id: string, data: Partial<QuoteCreateRequest>): Promise<Quote | null> {
+    try {
+      const quote = await QuoteModel.findByIdAndUpdate(id, data, { new: true }).populate('customer');
+      return quote ? quote.toObject() : null;
+    } catch (error) {
+      console.error('Error updating quote:', error);
+      throw error;
+    }
+  }
+
+  static async deleteQuote(id: string): Promise<boolean> {
+    try {
+      const result = await QuoteModel.findByIdAndDelete(id);
+      return !!result;
+    } catch (error) {
+      console.error('Error deleting quote:', error);
+      throw error;
+    }
+  }
+
+  static async sendQuote(quoteId: string): Promise<{ message: string }> {
+    try {
+      const quote = await QuoteModel.findById(quoteId).populate('customer');
+      if (!quote) {
+        throw new Error('Quote not found');
+      }
+
+      // TODO: Implement email sending logic
+      // TODO: Implement Stripe payment link generation
+      // TODO: Implement esignatures.io agreement link generation
+
+      quote.status = 'SENT';
+      quote.sentAt = new Date();
+      await quote.save();
+
+      return { message: 'Quote sent successfully' };
+    } catch (error) {
+      console.error('Error sending quote:', error);
+      throw error;
+    }
+  }
+}
+```
+
+# src/services/customerService.ts
+
+```ts
+import { Customer as CustomerModel } from '@/models';
+import { Customer, CustomerCreateRequest } from '@/types';
+
+export class CustomerService {
+  static async createCustomer(data: CustomerCreateRequest): Promise<Customer> {
+    try {
+      const customer = await CustomerModel.create(data);
+      return customer.toObject();
+    } catch (error) {
+      console.error('Error creating customer:', error);
+      throw error;
+    }
+  }
+
+  static async getAllCustomers(): Promise<Customer[]> {
+    try {
+      const customers = await CustomerModel.find().sort({ createdAt: -1 });
+      return customers.map(customer => customer.toObject());
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      throw error;
+    }
+  }
+
+  static async getCustomerById(id: string): Promise<Customer | null> {
+    try {
+      const customer = await CustomerModel.findById(id);
+      return customer ? customer.toObject() : null;
+    } catch (error) {
+      console.error('Error fetching customer:', error);
+      throw error;
+    }
+  }
+
+  static async updateCustomer(id: string, data: Partial<CustomerCreateRequest>): Promise<Customer | null> {
+    try {
+      const customer = await CustomerModel.findByIdAndUpdate(id, data, { new: true });
+      return customer ? customer.toObject() : null;
+    } catch (error) {
+      console.error('Error updating customer:', error);
+      throw error;
+    }
+  }
+
+  static async deleteCustomer(id: string): Promise<boolean> {
+    try {
+      const result = await CustomerModel.findByIdAndDelete(id);
+      return !!result;
+    } catch (error) {
+      console.error('Error deleting customer:', error);
+      throw error;
+    }
+  }
+
+  static async searchCustomers(term: string): Promise<Customer[]> {
+    try {
+      const customers = await CustomerModel.find({
+        $or: [
+          { firstName: { $regex: term, $options: 'i' } },
+          { lastName: { $regex: term, $options: 'i' } },
+          { email: { $regex: term, $options: 'i' } },
+        ]
+      }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
+      return customers.map(customer => customer.toObject());
+    } catch (error) {
+      console.error('Error searching customers:', error);
+      throw error;
+    }
+  }
+}
+```
+
 # src/models/index.ts
+
+```ts
+export { Customer } from './Customer';
+export type { ICustomer } from './Customer';
+export { RampDetails } from './RampDetails';
+export type { IRampDetails } from './RampDetails';
+export { RentalRequest } from './RentalRequest';
+export type { IRentalRequest } from './RentalRequest';
+export { Quote } from './Quote';
+export type { IQuote } from './Quote';
+export { Settings } from './Settings';
+export type { ISettings } from './Settings';
+```
+
+# src/models/Settings.ts
 
 ```ts
 import mongoose, { Document } from 'mongoose';
 
-const CustomerSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  phoneNumber: { type: String, required: true },
-  installAddress: { type: String, required: true }, // Changed from 'address' to 'installAddress'
-  mobilityAids: [{ type: String }],
+const SettingsSchema = new mongoose.Schema({
+  warehouseAddress: { type: String, required: true },
+  monthlyRatePerFt: { type: Number, required: true },
+  installRatePerComponent: { type: Number, required: true },
+  deliveryRatePerMile: { type: Number, required: true },
 });
 
-const RampDetailsSchema = new mongoose.Schema({
-  knowRampLength: { type: Boolean, required: true },
-  estimatedRampLength: { type: Number },
-  knowRentalDuration: { type: Boolean, required: true },
-  estimatedRentalDuration: { type: Number },
-  installationTimeframe: { type: String, required: true },
-  mobilityAids: [{ type: String }],
-  installationAddress: { type: String, required: true },
-});
+export interface ISettings extends Document {
+  warehouseAddress: string;
+  monthlyRatePerFt: number;
+  installRatePerComponent: number;
+  deliveryRatePerMile: number;
+}
+
+export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
+```
+
+# src/models/RentalRequest.ts
+
+```ts
+import mongoose, { Document } from 'mongoose';
 
 const RentalRequestSchema = new mongoose.Schema({
   firstName: String,
@@ -5093,6 +5351,58 @@ const RentalRequestSchema = new mongoose.Schema({
   installAddress: String,
   createdAt: { type: Date, default: Date.now },
 }, { strict: false });
+
+export interface IRentalRequest extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  knowRampLength: string;
+  estimatedRampLength?: string;
+  knowRentalDuration: string;
+  estimatedRentalDuration?: string;
+  installationTimeframe: string;
+  mobilityAids: string[];
+  installAddress: string;
+  createdAt: Date;
+}
+
+export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
+```
+
+# src/models/RampDetails.ts
+
+```ts
+import mongoose, { Document } from 'mongoose';
+
+const RampDetailsSchema = new mongoose.Schema({
+  knowRampLength: { type: Boolean, required: true },
+  estimatedRampLength: { type: Number },
+  knowRentalDuration: { type: Boolean, required: true },
+  estimatedRentalDuration: { type: Number },
+  installationTimeframe: { type: String, required: true },
+  mobilityAids: [{ type: String }],
+  installationAddress: { type: String, required: true },
+});
+
+export interface IRampDetails extends Document {
+  knowRampLength: boolean;
+  estimatedRampLength?: number;
+  knowRentalDuration: boolean;
+  estimatedRentalDuration?: number;
+  installationTimeframe: string;
+  mobilityAids: string[];
+  installationAddress: string;
+}
+
+export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
+```
+
+# src/models/Quote.ts
+
+```ts
+import mongoose, { Document } from 'mongoose';
+import { ICustomer } from './Customer';
 
 const QuoteSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
@@ -5113,47 +5423,6 @@ const QuoteSchema = new mongoose.Schema({
   paymentStatus: { type: String, default: 'PENDING' },
 });
 
-const SettingsSchema = new mongoose.Schema({
-  warehouseAddress: { type: String, required: true },
-  monthlyRatePerFt: { type: Number, required: true },
-  installRatePerComponent: { type: Number, required: true },
-  deliveryRatePerMile: { type: Number, required: true },
-});
-
-export interface ICustomer extends Document {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  mobilityAids: string[];
-}
-
-export interface IRampDetails extends Document {
-  knowRampLength: boolean;
-  estimatedRampLength?: number;
-  knowRentalDuration: boolean;
-  estimatedRentalDuration?: number;
-  installationTimeframe: string;
-  mobilityAids: string[];
-  installationAddress: string;
-}
-
-export interface IRentalRequest extends Document {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  knowRampLength: string;
-  estimatedRampLength?: string;
-  knowRentalDuration: string;
-  estimatedRentalDuration?: string;
-  installationTimeframe: string;
-  mobilityAids: string[];
-  installAddress: string;
-  createdAt: Date;
-}
-
 export interface IQuote extends Document {
   customer: mongoose.Types.ObjectId | ICustomer;
   installPrice: number;
@@ -5173,201 +5442,33 @@ export interface IQuote extends Document {
   paymentStatus: string;
 }
 
-export interface ISettings extends Document {
-  warehouseAddress: string;
-  monthlyRatePerFt: number;
-  installRatePerComponent: number;
-  deliveryRatePerMile: number;
+export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
+```
+
+# src/models/Customer.ts
+
+```ts
+import mongoose, { Document } from 'mongoose';
+
+const CustomerSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  phoneNumber: { type: String, required: true },
+  installAddress: { type: String, required: true },
+  mobilityAids: [{ type: String }],
+});
+
+export interface ICustomer extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  installAddress: string;
+  mobilityAids: string[];
 }
 
 export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
-export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
-export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
-export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
-export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
-
-// Remove this line:
-// export { Customer } from './Customer';
-```
-
-# src/lib/utils.ts
-
-```ts
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
-}
-```
-
-# src/lib/rate-limit.ts
-
-```ts
-import { NextRequest } from 'next/server';
-
-interface RateLimitStore {
-  [key: string]: {
-    count: number;
-    resetTime: number;
-  };
-}
-
-const store: RateLimitStore = {};
-
-export const rateLimit = (limit: number, interval: number) => {
-  return {
-    check: (req: NextRequest, identifier: string) => {
-      const now = Date.now();
-      const key = `${identifier}_${req.ip}`;
-
-      if (store[key] && now < store[key].resetTime) {
-        store[key].count++;
-        return store[key].count <= limit;
-      } else {
-        store[key] = {
-          count: 1,
-          resetTime: now + interval,
-        };
-        return true;
-      }
-    },
-  };
-};
-```
-
-# src/lib/mongodb.ts
-
-```ts
-import { MongoClient } from 'mongodb';
-import mongoose from 'mongoose';
-
-if (!process.env.MONGODB_URI) {
-  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
-}
-
-const uri = process.env.MONGODB_URI;
-const options: mongoose.ConnectOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-} as mongoose.ConnectOptions;
-
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
-
-// Use a module-level variable instead of a global
-let _mongoClientPromise: Promise<MongoClient> | undefined;
-
-if (process.env.NODE_ENV === 'development') {
-  if (!_mongoClientPromise) {
-    client = new MongoClient(uri);
-    _mongoClientPromise = client.connect();
-  }
-  clientPromise = _mongoClientPromise;
-} else {
-  client = new MongoClient(uri);
-  clientPromise = client.connect();
-}
-
-// Export the clientPromise
-export { clientPromise };
-
-// Cached connection for mongoose
-let cachedConnection: typeof mongoose | null = null;
-
-export async function dbConnect(): Promise<typeof mongoose> {
-  if (cachedConnection) {
-    return cachedConnection;
-  }
-
-  if (mongoose.connection.readyState >= 1) {
-    cachedConnection = mongoose;
-    return cachedConnection;
-  }
-
-  try {
-    cachedConnection = await mongoose.connect(uri, options);
-    return cachedConnection;
-  } catch (e) {
-    throw e;
-  }
-}
-
-// Create a named object for the default export
-const mongodbConnection = {
-  clientPromise,
-  dbConnect,
-};
-
-// Export the named object as default
-export default mongodbConnection;
-```
-
-# src/lib/cors.ts
-
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { allowedOrigins } from '@/config/cors';
-
-export function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
-  const origin = req.headers.get('origin');
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    res.headers.set('Access-Control-Allow-Origin', origin);
-    res.headers.set('Access-Control-Allow-Credentials', 'true');
-    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  }
-
-  return res;
-}
-
-export async function corsMiddleware(req: NextRequest) {
-  const origin = req.headers.get('origin');
-
-  if (origin && allowedOrigins.includes(origin)) {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Max-Age': '86400',
-      },
-    });
-  }
-
-  return new NextResponse(null, { status: 204 });
-}
-```
-
-# src/lib/apiHandler.ts
-
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { ApiResponse } from '@/types';
-
-type ApiHandler<T> = (
-  req: NextRequest,
-  context: { params: { [key: string]: string } }
-) => Promise<ApiResponse<T>>;
-
-export function createApiHandler<T>(handler: ApiHandler<T>) {
-  return async function(req: NextRequest, context: { params: { [key: string]: string } }) {
-    await dbConnect();
-
-    try {
-      const response = await handler(req, context);
-      return NextResponse.json(response);
-    } catch (error) {
-      console.error('API error:', error);
-      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-      return NextResponse.json({ error: errorMessage }, { status: 500 });
-    }
-  };
-}
 ```
 
 # src/hooks/usePricingVariables.ts
@@ -5511,6 +5612,205 @@ export const useDistanceCalculation = (origin: string, destination: string) => {
 };
 ```
 
+# src/lib/utils.ts
+
+```ts
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
+```
+
+# src/lib/rate-limit.ts
+
+```ts
+import { NextRequest } from 'next/server';
+
+interface RateLimitStore {
+  [key: string]: {
+    count: number;
+    resetTime: number;
+  };
+}
+
+const store: RateLimitStore = {};
+
+export const rateLimit = (limit: number, interval: number) => {
+  return {
+    check: (req: NextRequest, identifier: string) => {
+      const now = Date.now();
+      const key = `${identifier}_${req.ip}`;
+
+      if (store[key] && now < store[key].resetTime) {
+        store[key].count++;
+        return store[key].count <= limit;
+      } else {
+        store[key] = {
+          count: 1,
+          resetTime: now + interval,
+        };
+        return true;
+      }
+    },
+  };
+};
+```
+
+# src/lib/mongodb.ts
+
+```ts
+import { MongoClient } from 'mongodb';
+import mongoose from 'mongoose';
+
+if (!process.env.MONGODB_URI) {
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+}
+
+const uri = process.env.MONGODB_URI;
+const options: mongoose.ConnectOptions = {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+} as mongoose.ConnectOptions;
+
+let client: MongoClient;
+let clientPromise: Promise<MongoClient>;
+
+// Use a module-level variable instead of a global
+let _mongoClientPromise: Promise<MongoClient> | undefined;
+
+if (process.env.NODE_ENV === 'development') {
+  if (!_mongoClientPromise) {
+    client = new MongoClient(uri);
+    _mongoClientPromise = client.connect();
+  }
+  clientPromise = _mongoClientPromise;
+} else {
+  client = new MongoClient(uri);
+  clientPromise = client.connect();
+}
+
+// Export the clientPromise
+export { clientPromise };
+
+// Cached connection for mongoose
+let cachedConnection: typeof mongoose | null = null;
+
+export async function dbConnect(): Promise<typeof mongoose> {
+  if (cachedConnection) {
+    return cachedConnection;
+  }
+
+  if (mongoose.connection.readyState >= 1) {
+    cachedConnection = mongoose;
+    return cachedConnection;
+  }
+
+  try {
+    cachedConnection = await mongoose.connect(uri, options);
+    return cachedConnection;
+  } catch (e) {
+    throw e;
+  }
+}
+
+// Create a named object for the default export
+const mongodbConnection = {
+  clientPromise,
+  dbConnect,
+};
+
+// Export the named object as default
+export default mongodbConnection;
+```
+
+# src/lib/cors.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { allowedOrigins } from '@/config/cors';
+
+type HandlerFunction = (req: NextRequest) => Promise<NextResponse>;
+
+export function corsMiddleware(request: NextRequest, handler: HandlerFunction) {
+  const origin = request.headers.get('origin') || '';
+
+  // Handle preflight requests
+  if (request.method === 'OPTIONS') {
+    return handlePreflight(origin);
+  }
+
+  // Handle actual requests
+  return handleActualRequest(origin, request, handler);
+}
+
+function handlePreflight(origin: string) {
+  if (allowedOrigins.includes(origin)) {
+    const response = new NextResponse(null, { status: 204 });
+    setHeaders(response, origin);
+    return response;
+  }
+  return new NextResponse(null, { status: 204 });
+}
+
+async function handleActualRequest(origin: string, request: NextRequest, handler: HandlerFunction) {
+  const response = await handler(request);
+
+  if (allowedOrigins.includes(origin)) {
+    setHeaders(response, origin);
+  }
+
+  return response;
+}
+
+function setHeaders(response: NextResponse, origin: string) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+}
+```
+
+# src/lib/apiHandler.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { ApiResponse } from '@/types';
+
+type ApiHandler<T> = (
+  req: NextRequest,
+  context: { params: { [key: string]: string } }
+) => Promise<ApiResponse<T>>;
+
+export function createApiHandler<T>(handler: ApiHandler<T>) {
+  return async function(req: NextRequest, context: { params: { [key: string]: string } }) {
+    await dbConnect();
+
+    try {
+      const response = await handler(req, context);
+      return NextResponse.json(response);
+    } catch (error) {
+      console.error('API error:', error);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      return NextResponse.json({ error: errorMessage }, { status: 500 });
+    }
+  };
+}
+```
+
+# src/config/cors.ts
+
+```ts
+export const allowedOrigins = [
+    'https://www.samedayramps.com',
+    'https://form.samedayramps.com',
+    'https://app.samedayramps.com',
+    'http://localhost:3000'  // Include this for local development
+  ];
+```
+
 # src/contexts/QuoteContext.tsx
 
 ```tsx
@@ -5600,17 +5900,6 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </QuoteContext.Provider>
   );
 };
-```
-
-# src/config/cors.ts
-
-```ts
-export const allowedOrigins = [
-    'https://www.samedayramps.com',
-    'https://form.samedayramps.com',
-    'https://app.samedayramps.com',
-    'http://localhost:3000'  // Include this for local development
-  ];
 ```
 
 # src/components/SessionWrapper.tsx
@@ -6817,6 +7106,40 @@ const CreateQuoteButton: React.FC = () => {
 export default CreateQuoteButton;
 ```
 
+# src/components/AuthWrapper.tsx
+
+```tsx
+'use client';
+
+import { useSession } from 'next-auth/react';
+import { useRouter, usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+
+const publicPaths = ['/login', '/register']; // Add any public paths here
+
+export default function AuthWrapper({ children }: { children: React.ReactNode }) {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  useEffect(() => {
+    if (status === 'loading') return; // Do nothing while loading
+
+    if (!session && !publicPaths.includes(pathname)) {
+      router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
+    } else if (session && publicPaths.includes(pathname)) {
+      router.push('/');
+    }
+  }, [session, status, router, pathname]);
+
+  if (status === 'loading') {
+    return <div>Loading...</div>;
+  }
+
+  return <>{children}</>;
+}
+```
+
 # src/app/page.tsx
 
 ```tsx
@@ -6853,9 +7176,11 @@ export default function Home() {
 
 import React from 'react';
 import { SessionProvider } from "next-auth/react";
+import { Provider } from 'react-redux';
+import { store } from '@/store';
 import Header from '@/components/Header';
-import { QuoteProvider } from '@/contexts/QuoteContext';
 import '@/styles/globals.css';
+import AuthWrapper from '@/components/AuthWrapper';
 
 export default function RootLayout({
   children,
@@ -6866,14 +7191,16 @@ export default function RootLayout({
     <html lang="en">
       <body className="bg-gray-100 min-h-screen">
         <SessionProvider>
-          <QuoteProvider>
-            <Header />
-            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-              <main className="py-6">
-                {children}
-              </main>
-            </div>
-          </QuoteProvider>
+          <Provider store={store}>
+            <AuthWrapper>
+              <Header />
+              <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+                <main className="py-6">
+                  {children}
+                </main>
+              </div>
+            </AuthWrapper>
+          </Provider>
         </SessionProvider>
       </body>
     </html>
@@ -6899,26 +7226,6 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
     </SessionProvider>
   )
 }
-```
-
-# src/app/settings/page.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import PricingVariables from '@/components/PricingVariables';
-
-const SettingsPage: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <PricingVariables />
-    </div>
-  );
-};
-
-export default SettingsPage;
 ```
 
 # src/components/ui/Select.tsx
@@ -7803,6 +8110,51 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
+# src/app/settings/page.tsx
+
+```tsx
+'use client';
+
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
+
+const SettingsPage: React.FC = () => {
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
+    </div>
+  );
+};
+
+export default SettingsPage;
+```
+
+# src/app/quotes/page.tsx
+
+```tsx
+// src/app/quotes/page.tsx
+
+import React from 'react';
+import QuoteLayout from '@/components/QuoteLayout';
+import QuoteList from '@/components/QuoteList';
+import CreateQuoteButton from '@/components/CreateQuoteButton';
+
+export default function Quotes() {
+  return (
+    <QuoteLayout>
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-3xl font-bold">Quotes</h1>
+          <CreateQuoteButton />
+        </div>
+        <QuoteList />
+      </div>
+    </QuoteLayout>
+  );
+}
+```
+
 # src/app/rental-requests/page.tsx
 
 ```tsx
@@ -7881,30 +8233,238 @@ const RentalRequestsPage = () => {
 export default RentalRequestsPage;
 ```
 
-# src/app/quotes/page.tsx
+# src/app/store/settingsSlice.ts
 
-```tsx
-// src/app/quotes/page.tsx
+```ts
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { Settings, SettingsUpdateRequest } from '@/types';
+import { api } from '@/utils/api';
 
-import React from 'react';
-import QuoteLayout from '@/components/QuoteLayout';
-import QuoteList from '@/components/QuoteList';
-import CreateQuoteButton from '@/components/CreateQuoteButton';
-
-export default function Quotes() {
-  return (
-    <QuoteLayout>
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold">Quotes</h1>
-          <CreateQuoteButton />
-        </div>
-        <QuoteList />
-      </div>
-    </QuoteLayout>
-  );
+interface SettingsState {
+  settings: Settings | null;
+  loading: boolean;
+  error: string | null;
 }
+
+const initialState: SettingsState = {
+  settings: null,
+  loading: false,
+  error: null,
+};
+
+export const fetchSettings = createAsyncThunk<Settings, void, { rejectValue: string }>(
+  'settings/fetchSettings',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get<Settings>('/settings');
+      return response.data;
+    } catch (error) {
+      return rejectWithValue('Failed to fetch settings');
+    }
+  }
+);
+
+export const updateSettings = createAsyncThunk<Settings, SettingsUpdateRequest, { rejectValue: string }>(
+  'settings/updateSettings',
+  async (settingsData, { rejectWithValue }) => {
+    try {
+      const response = await api.post<Settings>('/settings', settingsData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue('Failed to update settings');
+    }
+  }
+);
+
+const settingsSlice = createSlice({
+  name: 'settings',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchSettings.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchSettings.fulfilled, (state, action: PayloadAction<Settings>) => {
+        state.settings = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchSettings.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload ?? 'Failed to fetch settings';
+      })
+      .addCase(updateSettings.fulfilled, (state, action: PayloadAction<Settings>) => {
+        state.settings = action.payload;
+      });
+  },
+});
+
+export default settingsSlice.reducer;
 ```
+
+# src/app/store/quotesSlice.ts
+
+```ts
+import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { Quote, QuoteCreateRequest } from '@/types';
+import { api } from '@/utils/api';
+
+interface QuotesState {
+  quotes: Quote[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: QuotesState = {
+  quotes: [],
+  loading: false,
+  error: null,
+};
+
+export const fetchQuotes = createAsyncThunk<Quote[], void, { rejectValue: string }>(
+  'quotes/fetchQuotes',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get<Quote[]>('/quotes');
+      return response.data ?? [];
+    } catch (error) {
+      return rejectWithValue('Failed to fetch quotes');
+    }
+  }
+);
+
+export const createQuote = createAsyncThunk<Quote, QuoteCreateRequest, { rejectValue: string }>(
+  'quotes/createQuote',
+  async (quoteData, { rejectWithValue }) => {
+    try {
+      const response = await api.post<Quote>('/quotes', quoteData);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue('Failed to create quote');
+    }
+  }
+);
+
+const quotesSlice = createSlice({
+  name: 'quotes',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchQuotes.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchQuotes.fulfilled, (state, action: PayloadAction<Quote[]>) => {
+        state.quotes = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchQuotes.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload ?? 'Failed to fetch quotes';
+      })
+      .addCase(createQuote.fulfilled, (state, action: PayloadAction<Quote>) => {
+        state.quotes.push(action.payload);
+      });
+  },
+});
+
+export default quotesSlice.reducer;
+```
+
+# src/app/store/index.ts
+
+```ts
+import { configureStore } from '@reduxjs/toolkit';
+import quotesReducer from './quotesSlice';
+import customersReducer from './customersSlice';
+import settingsReducer from './settingsSlice';
+
+export const store = configureStore({
+  reducer: {
+    quotes: quotesReducer,
+    customers: customersReducer,
+    settings: settingsReducer,
+  },
+});
+
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+```
+
+# src/app/store/hooks.ts
+
+```ts
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import type { RootState, AppDispatch } from './index';
+
+export const useAppDispatch = () => useDispatch<AppDispatch>();
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+```
+
+# src/app/store/customersSlice.ts
+
+```ts
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { Customer, CustomerCreateRequest } from '@/types';
+import { api } from '@/utils/api';
+
+interface CustomersState {
+  customers: Customer[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: CustomersState = {
+  customers: [],
+  loading: false,
+  error: null,
+};
+
+export const fetchCustomers = createAsyncThunk('customers/fetchCustomers', async () => {
+  const response = await api.get<Customer[]>('/customers');
+  return response.data;
+});
+
+export const createCustomer = createAsyncThunk('customers/createCustomer', async (customerData: CustomerCreateRequest) => {
+  const response = await api.post<Customer>('/customers', customerData);
+  return response.data;
+});
+
+const customersSlice = createSlice({
+  name: 'customers',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchCustomers.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchCustomers.fulfilled, (state, action) => {
+        state.customers = action.payload ?? [];
+        state.loading = false;
+      })
+      .addCase(fetchCustomers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.error.message || 'Failed to fetch customers';
+      })
+      .addCase(createCustomer.fulfilled, (state, action) => {
+        if (action.payload) {
+          state.customers.push(action.payload);
+        }
+      });
+  },
+});
+
+export default customersSlice.reducer;
+```
+
+# src/app/fonts/GeistVF.woff
+
+This is a binary file of the type: Binary
+
+# src/app/fonts/GeistMonoVF.woff
+
+This is a binary file of the type: Binary
 
 # src/app/login/page.tsx
 
@@ -7913,13 +8473,15 @@ export default function Quotes() {
 
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const callbackUrl = searchParams.get('callbackUrl') || '/';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -7929,12 +8491,13 @@ export default function LoginPage() {
       username,
       password,
       redirect: false,
+      callbackUrl,
     });
 
     if (result?.error) {
       setError(result.error);
     } else {
-      router.push('/');
+      router.push(callbackUrl);
     }
   };
 
@@ -7980,14 +8543,6 @@ export default function LoginPage() {
 }
 ```
 
-# src/app/fonts/GeistVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
-
 # src/app/customers/page.tsx
 
 ```tsx
@@ -8000,6 +8555,140 @@ export default function Customers() {
       <h1 className="text-3xl font-bold mb-6">Customers</h1>
       <CustomerList />
     </div>
+  );
+}
+```
+
+# src/app/quotes/new/page.tsx
+
+```tsx
+'use client';
+
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import CustomerSearch from '@/components/CustomerSearch';
+import CustomerDetails from '@/components/CustomerDetails';
+import RampConfigurationV2 from '@/components/RampConfiguration';
+import PricingComponent from '@/components/PricingComponent';
+import { Customer, RampComponent } from '@/types';
+
+const NewQuotePage: React.FC = () => {
+  const router = useRouter();
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
+  const [totalLength, setTotalLength] = useState(0);
+  const [installPrice, setInstallPrice] = useState(0);
+  const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [monthlyRate, setMonthlyRate] = useState(0);
+
+  const handleSelectCustomer = (customer: Customer) => {
+    setSelectedCustomer(customer);
+  };
+
+  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
+    setRampComponents(components);
+    setTotalLength(length);
+  };
+
+  const handlePriceCalculated = (install: number, delivery: number, monthly: number) => {
+    setInstallPrice(install);
+    setDeliveryPrice(delivery);
+    setMonthlyRate(monthly);
+  };
+
+  const handleCreateQuote = async () => {
+    if (!selectedCustomer) {
+      alert('Please select a customer');
+      return;
+    }
+
+    try {
+      const quoteData = {
+        customer: selectedCustomer._id,
+        installPrice,
+        deliveryPrice,
+        monthlyRate,
+        components: rampComponents,
+        status: 'DRAFT',
+        createdAt: new Date().toISOString(),
+        sentAt: null,
+        signedAt: null,
+        paymentStatus: 'PENDING',
+      };
+
+      const response = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(quoteData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create quote');
+      }
+
+      await response.json();
+      router.push('/quotes');
+    } catch (error) {
+      console.error('Failed to create quote:', error);
+      alert('Failed to create quote. Please try again.');
+    }
+  };
+
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Create New Quote</h1>
+      <CustomerSearch onSelectCustomer={handleSelectCustomer} />
+      {selectedCustomer && (
+        <div className="mt-6 mb-6">
+          <CustomerDetails 
+            customer={selectedCustomer} 
+            showActions={false}
+            onCustomerUpdate={(updatedCustomer) => setSelectedCustomer(updatedCustomer)}
+          />
+        </div>
+      )}
+      <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
+      {selectedCustomer && (
+        <PricingComponent 
+          rampComponents={rampComponents} 
+          totalLength={totalLength} 
+          installAddress={selectedCustomer.installAddress || ''}
+          onPriceCalculated={handlePriceCalculated}
+        />
+      )}
+      <button 
+        onClick={handleCreateQuote}
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"
+      >
+        Create Quote
+      </button>
+    </div>
+  );
+};
+
+export default NewQuotePage;
+```
+
+# src/app/quotes/[id]/page.tsx
+
+```tsx
+// src/app/quotes/[id]/page.tsx
+
+import React from 'react';
+import { QuoteProvider } from '@/contexts/QuoteContext';
+import QuoteDetails from '@/components/QuoteDetails';
+
+export default function QuotePage({ params }: { params: { id: string } }) {
+  return (
+    <QuoteProvider>
+      <div className="max-w-4xl mx-auto py-8">
+        <h1 className="text-3xl font-bold mb-6">Quote Details</h1>
+        <QuoteDetails id={params.id} />
+      </div>
+    </QuoteProvider>
   );
 }
 ```
@@ -8160,395 +8849,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
     </div>
   );
 }
-```
-
-# src/app/quotes/[id]/page.tsx
-
-```tsx
-// src/app/quotes/[id]/page.tsx
-
-import React from 'react';
-import { QuoteProvider } from '@/contexts/QuoteContext';
-import QuoteDetails from '@/components/QuoteDetails';
-
-export default function QuotePage({ params }: { params: { id: string } }) {
-  return (
-    <QuoteProvider>
-      <div className="max-w-4xl mx-auto py-8">
-        <h1 className="text-3xl font-bold mb-6">Quote Details</h1>
-        <QuoteDetails id={params.id} />
-      </div>
-    </QuoteProvider>
-  );
-}
-```
-
-# src/app/quotes/new/page.tsx
-
-```tsx
-'use client';
-
-import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import CustomerSearch from '@/components/CustomerSearch';
-import CustomerDetails from '@/components/CustomerDetails';
-import RampConfigurationV2 from '@/components/RampConfiguration';
-import PricingComponent from '@/components/PricingComponent';
-import { Customer, RampComponent } from '@/types';
-
-const NewQuotePage: React.FC = () => {
-  const router = useRouter();
-  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
-  const [totalLength, setTotalLength] = useState(0);
-  const [installPrice, setInstallPrice] = useState(0);
-  const [deliveryPrice, setDeliveryPrice] = useState(0);
-  const [monthlyRate, setMonthlyRate] = useState(0);
-
-  const handleSelectCustomer = (customer: Customer) => {
-    setSelectedCustomer(customer);
-  };
-
-  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
-    setRampComponents(components);
-    setTotalLength(length);
-  };
-
-  const handlePriceCalculated = (install: number, delivery: number, monthly: number) => {
-    setInstallPrice(install);
-    setDeliveryPrice(delivery);
-    setMonthlyRate(monthly);
-  };
-
-  const handleCreateQuote = async () => {
-    if (!selectedCustomer) {
-      alert('Please select a customer');
-      return;
-    }
-
-    try {
-      const quoteData = {
-        customer: selectedCustomer._id,
-        installPrice,
-        deliveryPrice,
-        monthlyRate,
-        components: rampComponents,
-        status: 'DRAFT',
-        createdAt: new Date().toISOString(),
-        sentAt: null,
-        signedAt: null,
-        paymentStatus: 'PENDING',
-      };
-
-      const response = await fetch('/api/quotes', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(quoteData),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to create quote');
-      }
-
-      await response.json();
-      router.push('/quotes');
-    } catch (error) {
-      console.error('Failed to create quote:', error);
-      alert('Failed to create quote. Please try again.');
-    }
-  };
-
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Create New Quote</h1>
-      <CustomerSearch onSelectCustomer={handleSelectCustomer} />
-      {selectedCustomer && (
-        <div className="mt-6 mb-6">
-          <CustomerDetails 
-            customer={selectedCustomer} 
-            showActions={false}
-            onCustomerUpdate={(updatedCustomer) => setSelectedCustomer(updatedCustomer)}
-          />
-        </div>
-      )}
-      <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
-      {selectedCustomer && (
-        <PricingComponent 
-          rampComponents={rampComponents} 
-          totalLength={totalLength} 
-          installAddress={selectedCustomer.installAddress || ''}
-          onPriceCalculated={handlePriceCalculated}
-        />
-      )}
-      <button 
-        onClick={handleCreateQuote}
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"
-      >
-        Create Quote
-      </button>
-    </div>
-  );
-};
-
-export default NewQuotePage;
-```
-
-# src/app/api/settings/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Settings } from '@/models';
-import { Settings as SettingsType, SettingsUpdateRequest } from '@/types';
-import { NextRequest } from 'next/server';
-
-export const GET = createApiHandler<SettingsType>(async () => {
-  const settings = await Settings.findOne();
-  return { data: settings ? settings.toObject() : null };
-});
-
-export const POST = createApiHandler<SettingsType>(async (request: NextRequest) => {
-  const data: SettingsUpdateRequest = await request.json();
-  const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
-  return { data: settings.toObject() };
-});
-```
-
-# src/app/api/send-quote/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-
-export const POST = createApiHandler<{ message: string }>(async (request) => {
-  const { quoteId } = await request.json();
-  const quote = await Quote.findById(quoteId).populate('customer');
-  
-  if (!quote) {
-    throw new Error('Quote not found');
-  }
-
-  // TODO: Implement email sending logic
-  // TODO: Implement Stripe payment link generation
-  // TODO: Implement esignatures.io agreement link generation
-
-  quote.status = 'SENT';
-  quote.sentAt = new Date();
-  await quote.save();
-
-  return { data: { message: 'Quote sent successfully' } };
-});
-```
-
-# src/app/api/rental-requests/route.ts
-
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { RentalRequest } from '@/models';
-
-const allowedOrigins = ['https://form.samedayramps.com', 'https://samedayramps.com'];
-
-function setHeaders(response: NextResponse, origin: string) {
-  response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
-}
-
-export async function OPTIONS(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-  
-  if (allowedOrigins.includes(origin)) {
-    const response = new NextResponse(null, { status: 204 });
-    setHeaders(response, origin);
-    return response;
-  }
-  return new NextResponse(null, { status: 204 });
-}
-
-export async function POST(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-  
-  try {
-    const body = await request.json();
-    console.log('Received body:', body);
-
-    // Create a new rental request without validation
-    const newRentalRequest = await RentalRequest.create(body);
-    
-    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('Error in POST /api/rental-requests:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  }
-}
-export async function GET(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    
-    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('Error in GET /api/rental-requests:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  }
-}
-```
-
-# src/app/api/register/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { clientPromise } from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
-
-export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
-  const { username, email, password } = await request.json();
-
-  if (!username || !email || !password) {
-    throw new Error('Missing required fields');
-  }
-
-  const client = await clientPromise;
-  const db = client.db();
-
-  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-  if (existingUser) {
-    throw new Error('Username or email already exists');
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const result = await db.collection('users').insertOne({
-    username,
-    email,
-    password: hashedPassword,
-  });
-
-  return { 
-    data: { 
-      message: 'User registered successfully', 
-      userId: result.insertedId.toString() 
-    } 
-  };
-});
-```
-
-# src/app/api/quotes/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-import { Quote as QuoteType, QuoteCreateRequest } from '@/types';
-
-export const GET = createApiHandler<QuoteType[]>(async () => {
-  const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
-  return { data: quotes };
-});
-
-export const POST = createApiHandler<QuoteType>(async (request) => {
-  const data: QuoteCreateRequest = await request.json();
-  
-  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
-    throw new Error('Missing required fields');
-  }
-
-  const quote = await Quote.create(data);
-  const populatedQuote = await Quote.findById(quote._id).populate('customer');
-  
-  if (!populatedQuote) {
-    throw new Error('Failed to create quote');
-  }
-
-  return { data: populatedQuote };
-});
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export const GET = createApiHandler<{ distance: number }>(async (request) => {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    throw new Error('Origin and destination are required');
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not set');
-  }
-
-  const response = await client.distancematrix({
-    params: {
-      origins: [origin],
-      destinations: [destination],
-      key: apiKey,
-    },
-  });
-
-  if (response.data.rows[0].elements[0].status !== 'OK') {
-    throw new Error('Unable to calculate distance');
-  }
-
-  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-  return { data: { distance } };
-});
-```
-
-# src/app/api/customers/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType, CustomerCreateRequest } from '@/types';
-
-export const POST = createApiHandler<CustomerType>(async (request) => {
-  const data: CustomerCreateRequest = await request.json();
-  const customer = await Customer.create(data);
-  return { data: customer.toObject() };
-});
-
-export const GET = createApiHandler<CustomerType[]>(async () => {
-  const customers = await Customer.find().sort({ createdAt: -1 });
-  return { data: customers.map(customer => customer.toObject()) };
-});
 ```
 
 # src/app/customers/[id]/page.tsx
@@ -8738,109 +9038,280 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
 }
 ```
 
+# src/app/api/settings/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { SettingsService } from '@/services/settingsService';
+import { Settings, ApiResponse } from '@/types';
+import { NextRequest } from 'next/server';
+
+export const GET = createApiHandler<Settings>(async (): Promise<ApiResponse<Settings>> => {
+  const settings = await SettingsService.getSettings();
+  return settings ? { data: settings } : { error: 'Settings not found' };
+});
+
+export const POST = createApiHandler<Settings>(async (request: NextRequest): Promise<ApiResponse<Settings>> => {
+  const data = await request.json();
+  const settings = await SettingsService.updateSettings(data);
+  return { data: settings };
+});
+```
+
+# src/app/api/send-quote/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { QuoteService } from '@/services/quoteService';
+
+export const POST = createApiHandler<{ message: string }>(async (request) => {
+  const { quoteId } = await request.json();
+  const result = await QuoteService.sendQuote(quoteId);
+  return { data: result };
+});
+```
+
+# src/app/api/rental-requests/route.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { RentalRequest } from '@/models';
+
+const allowedOrigins = ['https://form.samedayramps.com', 'https://samedayramps.com'];
+
+function setHeaders(response: NextResponse, origin: string) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
+}
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  if (allowedOrigins.includes(origin)) {
+    const response = new NextResponse(null, { status: 204 });
+    setHeaders(response, origin);
+    return response;
+  }
+  return new NextResponse(null, { status: 204 });
+}
+
+export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  try {
+    const body = await request.json();
+    console.log('Received body:', body);
+
+    // Create a new rental request without validation
+    const newRentalRequest = await RentalRequest.create(body);
+    
+    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
+```
+
+# src/app/api/register/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { clientPromise } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
+  const { username, email, password } = await request.json();
+
+  if (!username || !email || !password) {
+    throw new Error('Missing required fields');
+  }
+
+  const client = await clientPromise;
+  const db = client.db();
+
+  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+  if (existingUser) {
+    throw new Error('Username or email already exists');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const result = await db.collection('users').insertOne({
+    username,
+    email,
+    password: hashedPassword,
+  });
+
+  return { 
+    data: { 
+      message: 'User registered successfully', 
+      userId: result.insertedId.toString() 
+    } 
+  };
+});
+```
+
+# src/app/api/quotes/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { QuoteService } from '@/services/quoteService';
+import { Quote, QuoteCreateRequest } from '@/types';
+
+export const GET = createApiHandler<Quote[]>(async () => {
+  const quotes = await QuoteService.getAllQuotes();
+  return { data: quotes };
+});
+
+export const POST = createApiHandler<Quote>(async (request) => {
+  const data: QuoteCreateRequest = await request.json();
+  
+  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
+    throw new Error('Missing required fields');
+  }
+
+  const quote = await QuoteService.createQuote(data);
+  return { data: quote };
+});
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export const GET = createApiHandler<{ distance: number }>(async (request) => {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    throw new Error('Origin and destination are required');
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_MAPS_API_KEY is not set');
+  }
+
+  const response = await client.distancematrix({
+    params: {
+      origins: [origin],
+      destinations: [destination],
+      key: apiKey,
+    },
+  });
+
+  if (response.data.rows[0].elements[0].status !== 'OK') {
+    throw new Error('Unable to calculate distance');
+  }
+
+  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+  return { data: { distance } };
+});
+```
+
+# src/app/api/customers/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { CustomerService } from '@/services/customerService';
+import { Customer, CustomerCreateRequest } from '@/types';
+
+export const POST = createApiHandler<Customer>(async (request) => {
+  const data: CustomerCreateRequest = await request.json();
+  const customer = await CustomerService.createCustomer(data);
+  return { data: customer };
+});
+
+export const GET = createApiHandler<Customer[]>(async () => {
+  const customers = await CustomerService.getAllCustomers();
+  return { data: customers };
+});
+```
+
 # src/app/api/rental-requests/[id]/route.ts
 
 ```ts
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createApiHandler } from '@/lib/apiHandler';
-import { RentalRequest } from '@/models';
-import { RentalRequest as RentalRequestType, RentalRequestCreateRequest, ApiResponse } from '@/types';
+import { RentalRequestService } from '@/services/rentalRequestService';
+import { RentalRequest, RentalRequestCreateRequest, ApiResponse } from '@/types';
 import { corsMiddleware } from '@/lib/cors';
 
 export async function OPTIONS(req: NextRequest) {
-  return corsMiddleware(req);
+  return corsMiddleware(req, async () => {
+    return new NextResponse(null, { status: 204 });
+  });
 }
 
-export const GET = createApiHandler<RentalRequestType>(async (_request: NextRequest, { params }): Promise<ApiResponse<RentalRequestType>> => {
-  const rentalRequest = await RentalRequest.findById(params.id);
+export const GET = createApiHandler<RentalRequest>(async (_request: NextRequest, { params }): Promise<ApiResponse<RentalRequest>> => {
+  const rentalRequest = await RentalRequestService.getRentalRequestById(params.id);
   if (!rentalRequest) {
     return { error: 'Rental request not found' };
   }
-  return { data: rentalRequest.toObject() };
+  return { data: rentalRequest };
 });
 
-export const PUT = createApiHandler<RentalRequestType>(async (request: NextRequest, { params }): Promise<ApiResponse<RentalRequestType>> => {
+export const PUT = createApiHandler<RentalRequest>(async (request: NextRequest, { params }): Promise<ApiResponse<RentalRequest>> => {
   const data: RentalRequestCreateRequest = await request.json();
-  const updatedRentalRequest = await RentalRequest.findByIdAndUpdate(params.id, data, { new: true });
+  const updatedRentalRequest = await RentalRequestService.updateRentalRequest(params.id, data);
   if (!updatedRentalRequest) {
     return { error: 'Rental request not found' };
   }
-  return { data: updatedRentalRequest.toObject() };
+  return { data: updatedRentalRequest };
 });
 
 export const DELETE = createApiHandler<{ message: string }>(async (_request: NextRequest, { params }): Promise<ApiResponse<{ message: string }>> => {
-  const rentalRequest = await RentalRequest.findByIdAndDelete(params.id);
-  if (!rentalRequest) {
+  const result = await RentalRequestService.deleteRentalRequest(params.id);
+  if (!result) {
     return { error: 'Rental request not found' };
   }
   return { data: { message: 'Rental request deleted successfully' } };
-});
-```
-
-# src/app/api/quotes/[id]/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Quote } from '@/models';
-import { Quote as QuoteType, QuoteCreateRequest } from '@/types';
-import { NextRequest } from 'next/server';
-
-export const GET = createApiHandler<QuoteType>(async (_request: NextRequest, { params }) => {
-  const quote = await Quote.findById(params.id).populate('customer');
-  if (!quote) {
-    throw new Error('Quote not found');
-  }
-  return { data: quote.toObject() };
-});
-
-export const PUT = createApiHandler<QuoteType>(async (request: NextRequest, { params }) => {
-  const data: QuoteCreateRequest = await request.json();
-  const quote = await Quote.findByIdAndUpdate(params.id, data, { new: true }).populate('customer');
-  if (!quote) {
-    throw new Error('Quote not found');
-  }
-  return { data: quote.toObject() };
-});
-
-export const DELETE = createApiHandler<{ message: string }>(async (_request: NextRequest, { params }) => {
-  const quote = await Quote.findByIdAndDelete(params.id);
-  if (!quote) {
-    throw new Error('Quote not found');
-  }
-  return { data: { message: 'Quote deleted successfully' } };
-});
-```
-
-# src/app/api/customers/[id]/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType, CustomerCreateRequest } from '@/types';
-
-export const GET = createApiHandler<CustomerType>(async (_request, { params }) => {
-  const customer = await Customer.findById(params.id);
-  if (!customer) {
-    throw new Error('Customer not found');
-  }
-  return { data: customer.toObject() };
-});
-
-export const PUT = createApiHandler<CustomerType>(async (request, { params }) => {
-  const data: CustomerCreateRequest = await request.json();
-  const customer = await Customer.findByIdAndUpdate(params.id, data, { new: true });
-  if (!customer) {
-    throw new Error('Customer not found');
-  }
-  return { data: customer.toObject() };
-});
-
-export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }) => {
-  const customer = await Customer.findByIdAndDelete(params.id);
-  if (!customer) {
-    throw new Error('Customer not found');
-  }
-  return { data: { message: 'Customer deleted successfully' } };
 });
 ```
 
@@ -8848,10 +9319,10 @@ export const DELETE = createApiHandler<{ message: string }>(async (_request, { p
 
 ```ts
 import { createApiHandler } from '@/lib/apiHandler';
-import { Customer } from '@/models';
-import { Customer as CustomerType } from '@/types';
+import { SearchService } from '@/services/searchService';
+import { Customer } from '@/types';
 
-export const GET = createApiHandler<CustomerType[]>(async (request) => {
+export const GET = createApiHandler<Customer[]>(async (request) => {
   const { searchParams } = new URL(request.url);
   const term = searchParams.get('term');
 
@@ -8859,14 +9330,7 @@ export const GET = createApiHandler<CustomerType[]>(async (request) => {
     throw new Error('Search term is required');
   }
 
-  const customers = await Customer.find({
-    $or: [
-      { firstName: { $regex: term, $options: 'i' } },
-      { lastName: { $regex: term, $options: 'i' } },
-      { email: { $regex: term, $options: 'i' } },
-    ]
-  }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
-
+  const customers = await SearchService.searchCustomers(term);
   return { data: customers };
 });
 ```
@@ -8969,5 +9433,72 @@ if (isProduction) {
 } else {
   console.log("Running in development mode");
 }
+```
+
+# src/app/api/quotes/[id]/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { QuoteService } from '@/services/quoteService';
+import { Quote, QuoteCreateRequest, ApiResponse } from '@/types';
+import { NextRequest } from 'next/server';
+
+export const GET = createApiHandler<Quote>(async (_request: NextRequest, { params }): Promise<ApiResponse<Quote>> => {
+  const quote = await QuoteService.getQuoteById(params.id);
+  if (!quote) {
+    return { error: 'Quote not found' };
+  }
+  return { data: quote };
+});
+
+export const PUT = createApiHandler<Quote>(async (request: NextRequest, { params }): Promise<ApiResponse<Quote>> => {
+  const data: QuoteCreateRequest = await request.json();
+  const updatedQuote = await QuoteService.updateQuote(params.id, data);
+  if (!updatedQuote) {
+    return { error: 'Quote not found' };
+  }
+  return { data: updatedQuote };
+});
+
+export const DELETE = createApiHandler<{ message: string }>(async (_request: NextRequest, { params }): Promise<ApiResponse<{ message: string }>> => {
+  const result = await QuoteService.deleteQuote(params.id);
+  if (!result) {
+    return { error: 'Quote not found' };
+  }
+  return { data: { message: 'Quote deleted successfully' } };
+});
+```
+
+# src/app/api/customers/[id]/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { CustomerService } from '@/services/customerService';
+import { Customer, CustomerCreateRequest, ApiResponse } from '@/types';
+
+export const GET = createApiHandler<Customer>(async (_request, { params }): Promise<ApiResponse<Customer>> => {
+  const customer = await CustomerService.getCustomerById(params.id);
+  if (!customer) {
+    return { error: 'Customer not found' };
+  }
+  return { data: customer };
+});
+
+export const PUT = createApiHandler<Customer>(async (request, { params }): Promise<ApiResponse<Customer>> => {
+  const data: CustomerCreateRequest = await request.json();
+  const updatedCustomer = await CustomerService.updateCustomer(params.id, data);
+  if (!updatedCustomer) {
+    return { error: 'Customer not found' };
+  }
+  return { data: updatedCustomer };
+});
+
+export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }): Promise<ApiResponse<{ message: string }>> => {
+  const result = await CustomerService.deleteCustomer(params.id);
+  if (!result) {
+    return { error: 'Customer not found' };
+  }
+  return { data: { message: 'Customer deleted successfully' } };
+});
 ```
 
