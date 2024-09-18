@@ -50,3 +50,28 @@ export async function POST(request: NextRequest) {
     return response;
   }
 }
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
