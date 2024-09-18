@@ -120,11 +120,14 @@ module.exports = {
     "@radix-ui/react-slot": "^1.1.0",
     "@stripe/stripe-js": "^4.5.0",
     "@tailwindcss/forms": "^0.5.9",
+    "@upstash/ratelimit": "^2.0.3",
+    "@upstash/redis": "^1.34.0",
     "autoprefixer": "^10.4.20",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
+    "cors": "^2.8.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.441.0",
     "mongodb": "^5.9.2",
@@ -165,12 +168,31 @@ export default nextConfig;
 
 ```
 
+# next.config.js
+
+```js
+module.exports = {
+  async headers() {
+    return [
+      {
+        source: '/api/:path*',
+        headers: [
+          { key: 'Access-Control-Allow-Credentials', value: 'true' },
+          { key: 'Access-Control-Allow-Origin', value: '*' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
+          { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
+        ],
+      },
+    ];
+  },
+};
+```
+
 # next-env.d.ts
 
 ```ts
 /// <reference types="next" />
 /// <reference types="next/image-types/global" />
-/// <reference types="next/navigation-types/compat/navigation" />
 
 // NOTE: This file should not be edited
 // see https://nextjs.org/docs/app/building-your-application/configuring/typescript for more information.
@@ -274,21 +296,346 @@ next-env.d.ts
 
 ```ts
 import { withAuth } from "next-auth/middleware";
+import { NextResponse } from "next/server";
 
-export default withAuth({
-  pages: {
-    signIn: "/login",
+export default withAuth(
+  function middleware(req) {
+    const token = req.nextauth.token;
+    const isAuth = !!token;
+    const isAuthPage = req.nextUrl.pathname.startsWith("/login");
+
+    if (isAuthPage) {
+      if (isAuth) {
+        return NextResponse.redirect(new URL("/", req.url));
+      }
+      return null;
+    }
+
+    if (!isAuth) {
+      let from = req.nextUrl.pathname;
+      if (req.nextUrl.search) {
+        from += req.nextUrl.search;
+      }
+
+      return NextResponse.redirect(
+        new URL(`/login?from=${encodeURIComponent(from)}`, req.url)
+      );
+    }
+
+    // Optional: Check for specific user role
+    // if (token?.role !== "admin") {
+    //   return new NextResponse("You are not authorized to access this page.", { status: 403 });
+    // }
+
+    console.log(`User authenticated. Accessing: ${req.nextUrl.pathname}`);
   },
-});
+  {
+    callbacks: {
+      authorized: ({ token }) => {
+        // This is called before the middleware function
+        // Return true to allow the request, false to deny
+        return !!token;
+      },
+    },
+    pages: {
+      signIn: "/login",
+    },
+  }
+);
 
 export const config = {
   matcher: [
     "/customers/:path*",
     "/rental-requests/:path*",
     "/quotes/:path*",
+    "/settings",
     // Add other protected routes here
   ],
 };
+```
+
+# public/standalone-form.js
+
+```js
+(function() {
+  // Create and inject CSS
+  const style = document.createElement('style');
+  style.textContent = `
+    #rental-request-form {
+      font-family: Arial, sans-serif;
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    #rental-request-form input,
+    #rental-request-form select,
+    #rental-request-form button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 10px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    #rental-request-form button {
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    #rental-request-form button:hover {
+      background-color: #45a049;
+    }
+    .error {
+      color: red;
+      font-size: 0.8em;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Create form HTML
+  const createContactInfoForm = () => `
+    <h2>Contact Information</h2>
+    <input type="text" name="firstName" placeholder="First Name" required>
+    <div class="error" id="firstName-error"></div>
+    <input type="text" name="lastName" placeholder="Last Name" required>
+    <div class="error" id="lastName-error"></div>
+    <input type="email" name="email" placeholder="Email" required>
+    <div class="error" id="email-error"></div>
+    <input type="tel" name="phone" placeholder="Phone" required>
+    <div class="error" id="phone-error"></div>
+    <button type="button" id="next-button">Next</button>
+  `;
+
+  const createRampDetailsForm = () => `
+    <h2>Ramp Details</h2>
+    <div>
+      <label>Do you know the length of ramp you need?</label>
+      <input type="radio" name="knowRampLength" value="yes" required> Yes
+      <input type="radio" name="knowRampLength" value="no" required> No
+    </div>
+    <div class="error" id="knowRampLength-error"></div>
+    <input type="text" name="estimatedRampLength" placeholder="Estimated Ramp Length">
+    <div class="error" id="estimatedRampLength-error"></div>
+    <div>
+      <label>Do you know how long you need the ramp?</label>
+      <input type="radio" name="knowRentalDuration" value="yes" required> Yes
+      <input type="radio" name="knowRentalDuration" value="no" required> No
+    </div>
+    <div class="error" id="knowRentalDuration-error"></div>
+    <input type="text" name="estimatedRentalDuration" placeholder="Estimated Rental Duration">
+    <div class="error" id="estimatedRentalDuration-error"></div>
+    <select name="installationTimeframe" required>
+      <option value="">How soon do you need the ramp installed?</option>
+      <option value="Within 24 hours">Within 24 hours</option>
+      <option value="Within 2-3 days">Within 2-3 days</option>
+      <option value="Within 1 week">Within 1 week</option>
+      <option value="Within 2 weeks">Within 2 weeks</option>
+      <option value="More than 2 weeks">More than 2 weeks</option>
+    </select>
+    <div class="error" id="installationTimeframe-error"></div>
+    <div>
+      <label>Mobility Aids (select any that apply)</label><br>
+      <input type="checkbox" name="mobilityAids" value="Wheelchair"> Wheelchair<br>
+      <input type="checkbox" name="mobilityAids" value="Motorized scooter"> Motorized scooter<br>
+      <input type="checkbox" name="mobilityAids" value="Walker"> Walker
+    </div>
+    <div class="error" id="mobilityAids-error"></div>
+    <div>
+      <label for="installAddress">Installation Address</label>
+      <input type="text" id="installAddress" name="installAddress" placeholder="Start typing your address" required>
+    </div>
+    <div class="error" id="installAddress-error"></div>
+    <button type="button" id="prev-button">Previous</button>
+    <button type="submit">Submit Request</button>
+  `;
+
+  const createConfirmationPage = () => `
+    <h2>Thank You!</h2>
+    <p>Your rental request has been successfully submitted. We appreciate your interest in our wheelchair ramp rental service.</p>
+    <p>Our team will review your request and reach out to you shortly with more information and next steps.</p>
+    <p>If you have any immediate questions or concerns, please don't hesitate to contact us directly.</p>
+    <button type="button" id="start-over-button">Submit Another Request</button>
+  `;
+
+  // Create and append the form
+  const formContainer = document.createElement('div');
+  formContainer.id = 'rental-request-form';
+  document.currentScript.parentNode.insertBefore(formContainer, document.currentScript);
+
+  let currentPage = 1;
+  const formData = {};
+  let autocomplete;
+
+  function renderForm() {
+    if (currentPage === 1) {
+      formContainer.innerHTML = createContactInfoForm();
+      document.getElementById('next-button').addEventListener('click', handleNextPage);
+    } else if (currentPage === 2) {
+      formContainer.innerHTML = createRampDetailsForm();
+      document.getElementById('prev-button').addEventListener('click', handlePrevPage);
+      formContainer.querySelector('form').addEventListener('submit', handleSubmit);
+      initAutocomplete();
+    } else {
+      formContainer.innerHTML = createConfirmationPage();
+      document.getElementById('start-over-button').addEventListener('click', handleStartOver);
+    }
+  }
+
+  function initAutocomplete() {
+    const input = document.getElementById('installAddress');
+    autocomplete = new google.maps.places.Autocomplete(input, {
+      types: ['address'],
+      componentRestrictions: { country: 'us' }
+    });
+    autocomplete.addListener('place_changed', fillInAddress);
+  }
+
+  function fillInAddress() {
+    const place = autocomplete.getPlace();
+    let address = '';
+    let postcode = '';
+
+    for (const component of place.address_components) {
+      const componentType = component.types[0];
+
+      switch (componentType) {
+        case 'street_number':
+          address = `${component.long_name} ${address}`;
+          break;
+        case 'route':
+          address += component.short_name;
+          break;
+        case 'postal_code':
+          postcode = `${component.long_name}${postcode}`;
+          break;
+        case 'postal_code_suffix':
+          postcode = `${postcode}-${component.long_name}`;
+          break;
+        case 'locality':
+          address += `, ${component.long_name}`;
+          break;
+        case 'administrative_area_level_1':
+          address += `, ${component.short_name}`;
+          break;
+      }
+    }
+
+    document.getElementById('installAddress').value = `${address} ${postcode}`.trim();
+    formData.installAddress = `${address} ${postcode}`.trim();
+  }
+
+  function validatePage(pageNum) {
+    const errors = {};
+    if (pageNum === 1) {
+      if (!formData.firstName) errors.firstName = 'First name is required';
+      if (!formData.lastName) errors.lastName = 'Last name is required';
+      if (!formData.email) errors.email = 'Email is required';
+      if (!formData.phone) errors.phone = 'Phone number is required';
+    } else if (pageNum === 2) {
+      if (!formData.knowRampLength) errors.knowRampLength = 'Please select an option';
+      if (!formData.knowRentalDuration) errors.knowRentalDuration = 'Please select an option';
+      if (!formData.installationTimeframe) errors.installationTimeframe = 'Please select a timeframe';
+      if (!formData.installAddress) errors.installAddress = 'Installation address is required';
+    }
+    return errors;
+  }
+
+  function displayErrors(errors) {
+    Object.keys(errors).forEach(key => {
+      const errorElement = document.getElementById(`${key}-error`);
+      if (errorElement) {
+        errorElement.textContent = errors[key];
+      }
+    });
+  }
+
+  function handleNextPage() {
+    const errors = validatePage(1);
+    if (Object.keys(errors).length === 0) {
+      currentPage = 2;
+      renderForm();
+    } else {
+      displayErrors(errors);
+    }
+  }
+
+  function handlePrevPage() {
+    currentPage = 1;
+    renderForm();
+  }
+
+  function handleStartOver() {
+    currentPage = 1;
+    Object.keys(formData).forEach(key => delete formData[key]);
+    renderForm();
+  }
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    const errors = validatePage(2);
+    if (Object.keys(errors).length === 0) {
+      try {
+        const response = await fetch('https://app.samedayramps.com/api/rental-requests', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData),
+        });
+
+        if (response.ok) {
+          currentPage = 3;
+          renderForm();
+        } else {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Submission failed');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert(`An error occurred: ${error.message}`);
+      }
+    } else {
+      displayErrors(errors);
+    }
+  }
+
+  formContainer.addEventListener('change', (event) => {
+    const { name, value, type } = event.target;
+    if (type === 'checkbox') {
+      formData[name] = formData[name] || [];
+      if (event.target.checked) {
+        formData[name].push(value);
+      } else {
+        formData[name] = formData[name].filter(item => item !== value);
+      }
+    } else {
+      formData[name] = value;
+    }
+  });
+
+  renderForm();
+
+  // Load Google Maps JavaScript API
+  const script = document.createElement('script');
+  script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAVfRl3PtrFzGt-IGAPQvusRHALnK3NJhg&libraries=places`;
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+})();
+```
+
+# public/embeddable-form.css
+
+```css
+/* Add your form styles here */
+#rental-request-form-root {
+  font-family: Arial, sans-serif;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+/* Add more styles as needed */
 ```
 
 # src/utils/api.ts
@@ -439,27 +786,6 @@ body {
   }
 }
 
-```
-
-# src/pages/_app.tsx
-
-```tsx
-import React from 'react';
-import type { AppProps } from 'next/app';
-import Header from '@/components/Header';
-
-function MyApp({ Component, pageProps }: AppProps) {
-  return (
-    <>
-      <Header />
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <Component {...pageProps} />
-      </main>
-    </>
-  );
-}
-
-export default MyApp;
 ```
 
 # src/models/index.ts
@@ -627,17 +953,15 @@ const options: mongoose.ConnectOptions = {
 let client: MongoClient;
 let clientPromise: Promise<MongoClient>;
 
-declare global {
-  // eslint-disable-next-line no-var
-  var _mongoClientPromise: Promise<MongoClient> | undefined;
-}
+// Use a module-level variable instead of a global
+let _mongoClientPromise: Promise<MongoClient> | undefined;
 
 if (process.env.NODE_ENV === 'development') {
-  if (!global._mongoClientPromise) {
+  if (!_mongoClientPromise) {
     client = new MongoClient(uri);
-    global._mongoClientPromise = client.connect();
+    _mongoClientPromise = client.connect();
   }
-  clientPromise = global._mongoClientPromise;
+  clientPromise = _mongoClientPromise;
 } else {
   client = new MongoClient(uri);
   clientPromise = client.connect();
@@ -647,12 +971,24 @@ if (process.env.NODE_ENV === 'development') {
 // separate module, the client can be shared across functions.
 export default clientPromise;
 
-export async function dbConnect() {
-  if (mongoose.connection.readyState >= 1) {
+// Cached connection for mongoose
+let cachedConnection: typeof mongoose | null = null;
+
+export async function dbConnect(): Promise<void> {
+  if (cachedConnection) {
     return;
   }
 
-  return mongoose.connect(uri, options);
+  if (mongoose.connection.readyState >= 1) {
+    cachedConnection = mongoose;
+    return;
+  }
+
+  try {
+    cachedConnection = await mongoose.connect(uri, options);
+  } catch (e) {
+    throw e;
+  }
 }
 ```
 
@@ -1689,6 +2025,84 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
 export default ErrorBoundary;
 ```
 
+# src/components/EmbeddableRentalRequestForm.tsx
+
+```tsx
+import React, { useState } from 'react';
+
+const EmbeddableRentalRequestForm: React.FC = () => {
+  const [formData, setFormData] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    knowRampLength: '',
+    estimatedRampLength: '',
+    knowRentalDuration: '',
+    estimatedRentalDuration: '',
+    installationTimeframe: '',
+    mobilityAids: [],
+    installAddress: '',
+  });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('https://app.samedayramps.com/api/rental-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
+      if (response.ok) {
+        setIsSubmitted(true);
+      } else {
+        // Handle error
+        console.error('Submission failed');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isSubmitted) {
+    return <div>Thank you for your submission!</div>;
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Render form fields here */}
+      <input
+        type="text"
+        name="firstName"
+        value={formData.firstName}
+        onChange={handleChange}
+        placeholder="First Name"
+        required
+      />
+      {/* Add more form fields */}
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? 'Submitting...' : 'Submit Request'}
+      </button>
+    </form>
+  );
+};
+
+export default EmbeddableRentalRequestForm;
+```
+
 # src/components/CustomerSearch.tsx
 
 ```tsx
@@ -2046,10 +2460,13 @@ export default function Home() {
 # src/app/layout.tsx
 
 ```tsx
+'use client';
+
 import React from 'react';
+import { SessionProvider } from "next-auth/react";
 import Header from '@/components/Header';
 import { QuoteProvider } from '@/contexts/QuoteContext';
-import '@/styles/globals.css'; // Make sure this import is present to include your global styles
+import '@/styles/globals.css';
 
 export default function RootLayout({
   children,
@@ -2059,14 +2476,16 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="bg-gray-100 min-h-screen">
-        <QuoteProvider>
-          <Header />
-          <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-            <main className="py-6">
-              {children}
-            </main>
-          </div>
-        </QuoteProvider>
+        <SessionProvider>
+          <QuoteProvider>
+            <Header />
+            <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+              <main className="py-6">
+                {children}
+              </main>
+            </div>
+          </QuoteProvider>
+        </SessionProvider>
       </body>
     </html>
   );
@@ -2076,6 +2495,22 @@ export default function RootLayout({
 # src/app/favicon.ico
 
 This is a binary file of the type: Binary
+
+# src/app/_app.tsx
+
+```tsx
+import { SessionProvider } from "next-auth/react"
+import type { AppProps } from "next/app"
+import '@/styles/globals.css'
+
+export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps) {
+  return (
+    <SessionProvider session={session}>
+      <Component {...pageProps} />
+    </SessionProvider>
+  )
+}
+```
 
 # src/components/ui/Select.tsx
 
@@ -3092,50 +3527,32 @@ import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 
 export default function LoginPage() {
-  const [isLogin, setIsLogin] = useState(true);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [email, setEmail] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isLogin) {
-      const result = await signIn('credentials', {
-        username,
-        password,
-        redirect: false,
-      });
+    setError(null);
 
-      if (result?.error) {
-        alert(result.error);
-      } else {
-        router.push('/');
-      }
+    const result = await signIn('credentials', {
+      username,
+      password,
+      redirect: false,
+    });
+
+    if (result?.error) {
+      setError(result.error);
     } else {
-      // Registration logic
-      const response = await fetch('/api/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, email, password }),
-      });
-
-      if (response.ok) {
-        alert('Registration successful! Please log in.');
-        setIsLogin(true);
-      } else {
-        const data = await response.json();
-        alert(data.message || 'Registration failed');
-      }
+      router.push('/');
     }
   };
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
       <div className="px-8 py-6 mt-4 text-left bg-white shadow-lg">
-        <h3 className="text-2xl font-bold text-center">
-          {isLogin ? 'Login to your account' : 'Create an account'}
-        </h3>
+        <h3 className="text-2xl font-bold text-center">Login to your account</h3>
         <form onSubmit={handleSubmit}>
           <div className="mt-4">
             <div>
@@ -3149,19 +3566,6 @@ export default function LoginPage() {
                 required
               />
             </div>
-            {!isLogin && (
-              <div className="mt-4">
-                <label className="block" htmlFor="email">Email</label>
-                <input
-                  type="email"
-                  placeholder="Email"
-                  className="w-full px-4 py-2 mt-2 border rounded-md focus:outline-none focus:ring-1 focus:ring-blue-600"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                />
-              </div>
-            )}
             <div className="mt-4">
               <label className="block" htmlFor="password">Password</label>
               <input
@@ -3173,21 +3577,41 @@ export default function LoginPage() {
                 required
               />
             </div>
+            {error && <p className="text-red-500 mt-2">{error}</p>}
             <div className="flex items-baseline justify-between">
               <button className="px-6 py-2 mt-4 text-white bg-blue-600 rounded-lg hover:bg-blue-900" type="submit">
-                {isLogin ? 'Login' : 'Register'}
-              </button>
-              <button
-                type="button"
-                className="text-sm text-blue-600 hover:underline"
-                onClick={() => setIsLogin(!isLogin)}
-              >
-                {isLogin ? 'Need an account? Register' : 'Have an account? Login'}
+                Login
               </button>
             </div>
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+```
+
+# src/app/embed/page.tsx
+
+```tsx
+import React from 'react';
+
+export default function EmbedPage() {
+  return (
+    <div>
+      <h1>Embed Rental Request Form</h1>
+      <p>To embed the rental request form on your website, follow these steps:</p>
+      <ol>
+        <li>
+          Add a container div to your HTML where you want the form to appear:
+          <pre><code>{`<div id="rental-request-form-root"></div>`}</code></pre>
+        </li>
+        <li>
+          Add the following script tag to your HTML, preferably just before the closing &lt;/body&gt; tag:
+          <pre><code>{`<script src="https://app.samedayramps.com/api/embed"></script>`}</code></pre>
+        </li>
+      </ol>
+      <p>The form will automatically render inside the container div.</p>
     </div>
   );
 }
@@ -3775,6 +4199,76 @@ export async function POST(request: Request) {
 }
 ```
 
+# src/app/api/rental-requests/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest, IRentalRequest } from '@/models';
+
+// Define the RentalRequestType
+type RentalRequestType = z.infer<typeof RentalRequestSchema>;
+
+// Define the ApiResponse type
+type ApiResponse<T> = {
+  data?: T;
+  error?: string;
+};
+
+// Define the schema for input validation
+const RentalRequestSchema = z.object({
+  firstName: z.string().min(1).max(50),
+  lastName: z.string().min(1).max(50),
+  email: z.string().email(),
+  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
+  knowRampLength: z.enum(['yes', 'no']),
+  estimatedRampLength: z.string().optional(),
+  knowRentalDuration: z.enum(['yes', 'no']),
+  estimatedRentalDuration: z.string().optional(),
+  installationTimeframe: z.string(),
+  mobilityAids: z.array(z.string()),
+  installAddress: z.string(),
+});
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const body = await request.json();
+    const validatedData = RentalRequestSchema.parse(body);
+
+    // Save the validated data to the database
+    const newRentalRequest = new RentalRequest(validatedData);
+    await newRentalRequest.save();
+
+    const response: ApiResponse<RentalRequestType> = { data: validatedData };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const response: ApiResponse<never> = { error: JSON.stringify(error.errors) };
+      return NextResponse.json(response, { status: 400 });
+    }
+    const response: ApiResponse<never> = { error: 'Internal Server Error' };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response: ApiResponse<IRentalRequest[]> = { data: rentalRequests };
+    return NextResponse.json(response);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response: ApiResponse<never> = { error: errorMessage };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
 # src/app/api/register/route.ts
 
 ```ts
@@ -3871,45 +4365,22 @@ export async function POST(request: Request) {
 }
 ```
 
-# src/app/api/rental-requests/route.ts
+# src/app/api/embed/route.ts
 
 ```ts
-// src/app/api/rental-requests/route.ts
-
 import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest } from '@/models';
-import { ApiResponse, RentalRequest as RentalRequestType } from '@/types'; // Add this import
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const rentalRequest = await RentalRequest.create(data);
-    const response: ApiResponse<RentalRequestType> = { data: rentalRequest };
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Error creating rental request:', error);
-    const response: ApiResponse<never> = { error: 'Failed to create rental request' };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
+import fs from 'fs';
+import path from 'path';
 
 export async function GET() {
-  await dbConnect();
+  const filePath = path.join(process.cwd(), 'public', 'standalone-form.js');
+  const fileContents = fs.readFileSync(filePath, 'utf8');
 
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    const response: ApiResponse<RentalRequestType[]> = { data: rentalRequests };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error in GET /api/rental-requests:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch rental requests',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
+  return new NextResponse(fileContents, {
+    headers: {
+      'Content-Type': 'application/javascript',
+    },
+  });
 }
 ```
 
@@ -4005,6 +4476,57 @@ export async function GET() {
       error: 'Failed to fetch customers',
     };
     return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/rental-requests/[id]/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest } from '@/models';
+
+export async function GET(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const rentalRequest = await RentalRequest.findById(params.id);
+    if (!rentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json(rentalRequest);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to fetch rental request' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const rentalRequest = await RentalRequest.findByIdAndDelete(params.id);
+    if (!rentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json({ message: 'Rental request deleted successfully' });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to delete rental request' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request, { params }: { params: { id: string } }) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const updatedRentalRequest = await RentalRequest.findByIdAndUpdate(params.id, data, { new: true });
+    if (!updatedRentalRequest) {
+      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
+    }
+    return NextResponse.json(updatedRentalRequest);
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update rental request' }, { status: 500 });
   }
 }
 ```
@@ -4119,91 +4641,6 @@ export async function POST(request: Request) {
 }
 ```
 
-# src/app/api/rental-requests/[id]/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest } from '@/models';
-
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const rentalRequest = await RentalRequest.findById(params.id);
-    if (!rentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json(rentalRequest);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch rental request' }, { status: 500 });
-  }
-}
-
-export async function DELETE(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const rentalRequest = await RentalRequest.findByIdAndDelete(params.id);
-    if (!rentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json({ message: 'Rental request deleted successfully' });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to delete rental request' }, { status: 500 });
-  }
-}
-
-export async function PUT(request: Request, { params }: { params: { id: string } }) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const updatedRentalRequest = await RentalRequest.findByIdAndUpdate(params.id, data, { new: true });
-    if (!updatedRentalRequest) {
-      return NextResponse.json({ error: 'Rental request not found' }, { status: 404 });
-    }
-    return NextResponse.json(updatedRentalRequest);
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update rental request' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/customers/search/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Customer } from '@/models';
-
-export async function GET(request: Request) {
-  await dbConnect();
-
-  const { searchParams } = new URL(request.url);
-  const term = searchParams.get('term');
-
-  if (!term) {
-    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
-  }
-
-  try {
-    const customers = await Customer.find({
-      $or: [
-        { firstName: { $regex: term, $options: 'i' } },
-        { lastName: { $regex: term, $options: 'i' } },
-        { email: { $regex: term, $options: 'i' } },
-      ]
-    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
-
-    return NextResponse.json(customers);
-  } catch (error) {
-    console.error('Error searching customers:', error);
-    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
-  }
-}
-```
-
 # src/app/api/customers/[id]/route.ts
 
 ```ts
@@ -4286,6 +4723,40 @@ export async function DELETE(
 }
 ```
 
+# src/app/api/customers/search/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Customer } from '@/models';
+
+export async function GET(request: Request) {
+  await dbConnect();
+
+  const { searchParams } = new URL(request.url);
+  const term = searchParams.get('term');
+
+  if (!term) {
+    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
+  }
+
+  try {
+    const customers = await Customer.find({
+      $or: [
+        { firstName: { $regex: term, $options: 'i' } },
+        { lastName: { $regex: term, $options: 'i' } },
+        { email: { $regex: term, $options: 'i' } },
+      ]
+    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
+
+    return NextResponse.json(customers);
+  } catch (error) {
+    console.error('Error searching customers:', error);
+    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
+  }
+}
+```
+
 # src/app/api/auth/[...nextauth]/route.ts
 
 ```ts
@@ -4305,14 +4776,12 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
-// Check for NEXTAUTH_SECRET
 if (!process.env.NEXTAUTH_SECRET) {
   console.error("Warning: NEXTAUTH_SECRET is not set");
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Logging for debugging
 console.log('NODE_ENV:', process.env.NODE_ENV);
 console.log('NEXTAUTH_SECRET:', process.env.NEXTAUTH_SECRET ? 'is set' : 'is not set');
 console.log('Is Production:', isProduction);
@@ -4369,6 +4838,10 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   secret: process.env.NEXTAUTH_SECRET || (isProduction ? undefined : 'DEVELOPMENT_SECRET'),
   debug: !isProduction,

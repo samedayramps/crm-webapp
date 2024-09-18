@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest, IRentalRequest } from '@/models';
@@ -27,11 +27,25 @@ const RentalRequestSchema = z.object({
   installAddress: z.string(),
 });
 
-export async function POST(request: Request) {
+// Custom CORS function
+function setCORSHeaders(res: NextResponse): NextResponse {
+  res.headers.set('Access-Control-Allow-Origin', 'https://form.samedayramps.com');
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
+}
+
+export async function OPTIONS() {
+  const res = new NextResponse(null, { status: 200 });
+  return setCORSHeaders(res);
+}
+
+export async function POST(req: NextRequest) {
   await dbConnect();
 
   try {
-    const body = await request.json();
+    const body = await req.json();
     const validatedData = RentalRequestSchema.parse(body);
 
     // Save the validated data to the database
@@ -39,14 +53,22 @@ export async function POST(request: Request) {
     await newRentalRequest.save();
 
     const response: ApiResponse<RentalRequestType> = { data: validatedData };
-    return NextResponse.json(response, { status: 201 });
+    const res = NextResponse.json(response, { status: 201 });
+    return setCORSHeaders(res);
   } catch (error) {
+    let response: ApiResponse<never>;
+    let status: number;
+
     if (error instanceof z.ZodError) {
-      const response: ApiResponse<never> = { error: JSON.stringify(error.errors) };
-      return NextResponse.json(response, { status: 400 });
+      response = { error: JSON.stringify(error.errors) };
+      status = 400;
+    } else {
+      response = { error: 'Internal Server Error' };
+      status = 500;
     }
-    const response: ApiResponse<never> = { error: 'Internal Server Error' };
-    return NextResponse.json(response, { status: 500 });
+
+    const res = NextResponse.json(response, { status });
+    return setCORSHeaders(res);
   }
 }
 
@@ -56,10 +78,12 @@ export async function GET() {
   try {
     const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
     const response: ApiResponse<IRentalRequest[]> = { data: rentalRequests };
-    return NextResponse.json(response);
+    const res = NextResponse.json(response);
+    return setCORSHeaders(res);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     const response: ApiResponse<never> = { error: errorMessage };
-    return NextResponse.json(response, { status: 500 });
+    const res = NextResponse.json(response, { status: 500 });
+    return setCORSHeaders(res);
   }
 }
