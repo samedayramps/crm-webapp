@@ -640,123 +640,6 @@ export const config = {
 /* Add more styles as needed */
 ```
 
-# src/utils/api.ts
-
-```ts
-// src/utils/api.ts
-
-import { ApiResponse } from '../types';
-
-async function fetchAPI<T>(
-  endpoint: string,
-  method: string = 'GET',
-  body?: object
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(endpoint, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('API error:', error);
-    return { error: error instanceof Error ? error.message : 'An unknown error occurred' };
-  }
-}
-
-export const api = {
-  get: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`),
-  post: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'POST', body),
-  put: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'PUT', body),
-  delete: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`, 'DELETE'),
-};
-```
-
-# src/types/next-auth.d.ts
-
-```ts
-import "next-auth";
-
-declare module "next-auth" {
-  interface Session {
-    user: {
-      id: string;
-      name?: string | null;
-      email?: string | null;
-      image?: string | null;
-    }
-  }
-}
-```
-
-# src/types/index.ts
-
-```ts
-// src/types/index.ts
-
-export interface Customer {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phoneNumber: string;
-    installAddress?: string; // Optional property
-    mobilityAids: string[];
-  }
-  
-  export interface RentalRequest {
-    _id: string;
-    firstName: string;
-    lastName: string;
-    email: string;
-    phone: string;
-    knowRampLength: string;
-    estimatedRampLength: string;
-    knowRentalDuration: string;
-    estimatedRentalDuration: string;
-    installationTimeframe: string;
-    mobilityAids: string[];
-    installAddress: string;
-    createdAt: string;
-  }
-  
-  export interface RampComponent {
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-  }
-  
-  export interface Quote {
-    _id: string;
-    customer: string | Customer;
-    installPrice: number;
-    deliveryPrice: number;
-    monthlyRate: number;
-    components: RampComponent[];
-    status: string;
-    createdAt: string;
-    updatedAt: string;
-    sentAt: string | null;
-    signedAt: string | null;
-    paymentStatus: string;
-  }
-  
-  export interface ApiResponse<T> {
-    data?: T;
-    error?: string;
-  }
-```
-
 # src/styles/globals.css
 
 ```css
@@ -788,141 +671,6 @@ body {
   }
 }
 
-```
-
-# src/models/index.ts
-
-```ts
-import mongoose, { Document } from 'mongoose';
-
-const CustomerSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  phoneNumber: { type: String, required: true },
-  installAddress: { type: String, required: true }, // Changed from 'address' to 'installAddress'
-  mobilityAids: [{ type: String }],
-});
-
-const RampDetailsSchema = new mongoose.Schema({
-  knowRampLength: { type: Boolean, required: true },
-  estimatedRampLength: { type: Number },
-  knowRentalDuration: { type: Boolean, required: true },
-  estimatedRentalDuration: { type: Number },
-  installationTimeframe: { type: String, required: true },
-  mobilityAids: [{ type: String }],
-  installationAddress: { type: String, required: true },
-});
-
-const RentalRequestSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true },
-  phone: { type: String, required: true },
-  knowRampLength: { type: String, required: true },
-  estimatedRampLength: { type: String },
-  knowRentalDuration: { type: String, required: true },
-  estimatedRentalDuration: { type: String },
-  installationTimeframe: { type: String, required: true },
-  mobilityAids: [{ type: String }],
-  installAddress: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-});
-
-const QuoteSchema = new mongoose.Schema({
-  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
-  installPrice: { type: Number, required: true },
-  deliveryPrice: { type: Number, required: true },
-  monthlyRate: { type: Number, required: true },
-  components: [{ 
-    id: String,
-    name: String,
-    quantity: Number,
-    price: Number
-  }],
-  status: { type: String, default: 'DRAFT' },
-  createdAt: { type: Date, default: Date.now },
-  updatedAt: { type: Date, default: Date.now },
-  sentAt: { type: Date },
-  signedAt: { type: Date },
-  paymentStatus: { type: String, default: 'PENDING' },
-});
-
-const SettingsSchema = new mongoose.Schema({
-  warehouseAddress: { type: String, required: true },
-  monthlyRatePerFt: { type: Number, required: true },
-  installRatePerComponent: { type: Number, required: true },
-  deliveryRatePerMile: { type: Number, required: true },
-});
-
-export interface ICustomer extends Document {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phoneNumber: string;
-  address: string;
-  mobilityAids: string[];
-}
-
-export interface IRampDetails extends Document {
-  knowRampLength: boolean;
-  estimatedRampLength?: number;
-  knowRentalDuration: boolean;
-  estimatedRentalDuration?: number;
-  installationTimeframe: string;
-  mobilityAids: string[];
-  installationAddress: string;
-}
-
-export interface IRentalRequest extends Document {
-  firstName: string;
-  lastName: string;
-  email: string;
-  phone: string;
-  knowRampLength: string;
-  estimatedRampLength?: string;
-  knowRentalDuration: string;
-  estimatedRentalDuration?: string;
-  installationTimeframe: string;
-  mobilityAids: string[];
-  installAddress: string;
-  createdAt: Date;
-}
-
-export interface IQuote extends Document {
-  customer: mongoose.Types.ObjectId | ICustomer;
-  installPrice: number;
-  deliveryPrice: number;
-  monthlyRate: number;
-  components: {
-    id: string;
-    name: string;
-    quantity: number;
-    price: number;
-  }[];
-  status: string;
-  createdAt: Date;
-  updatedAt: Date;
-  sentAt?: Date;
-  signedAt?: Date;
-  paymentStatus: string;
-}
-
-export interface ISettings extends Document {
-  warehouseAddress: string;
-  monthlyRatePerFt: number;
-  installRatePerComponent: number;
-  deliveryRatePerMile: number;
-}
-
-export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
-export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
-export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
-export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
-export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
-
-// Remove this line:
-// export { Customer } from './Customer';
 ```
 
 # src/lib/utils.ts
@@ -1001,6 +749,47 @@ const mongodbConnection = {
 
 // Export the named object as default
 export default mongodbConnection;
+```
+
+# src/utils/api.ts
+
+```ts
+// src/utils/api.ts
+
+import { ApiResponse } from '../types';
+
+async function fetchAPI<T>(
+  endpoint: string,
+  method: string = 'GET',
+  body?: object
+): Promise<ApiResponse<T>> {
+  try {
+    const response = await fetch(endpoint, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('API error:', error);
+    return { error: error instanceof Error ? error.message : 'An unknown error occurred' };
+  }
+}
+
+export const api = {
+  get: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`),
+  post: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'POST', body),
+  put: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'PUT', body),
+  delete: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`, 'DELETE'),
+};
 ```
 
 # src/hooks/usePricingVariables.ts
@@ -1233,16 +1022,6 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </QuoteContext.Provider>
   );
 };
-```
-
-# src/config/cors.ts
-
-```ts
-export const allowedOrigins = [
-    'https://www.samedayramps.com',
-    'https://form.samedayramps.com',
-    'http://localhost:3000'  // Include this for local development
-  ];
 ```
 
 # src/components/SessionWrapper.tsx
@@ -2449,6 +2228,16 @@ const CreateQuoteButton: React.FC = () => {
 export default CreateQuoteButton;
 ```
 
+# src/config/cors.ts
+
+```ts
+export const allowedOrigins = [
+    'https://www.samedayramps.com',
+    'https://form.samedayramps.com',
+    'http://localhost:3000'  // Include this for local development
+  ];
+```
+
 # src/app/page.tsx
 
 ```tsx
@@ -2531,6 +2320,577 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
     </SessionProvider>
   )
 }
+```
+
+# src/models/index.ts
+
+```ts
+import mongoose, { Document } from 'mongoose';
+
+const CustomerSchema = new mongoose.Schema({
+  firstName: { type: String, required: true },
+  lastName: { type: String, required: true },
+  email: { type: String, required: true, unique: true },
+  phoneNumber: { type: String, required: true },
+  installAddress: { type: String, required: true }, // Changed from 'address' to 'installAddress'
+  mobilityAids: [{ type: String }],
+});
+
+const RampDetailsSchema = new mongoose.Schema({
+  knowRampLength: { type: Boolean, required: true },
+  estimatedRampLength: { type: Number },
+  knowRentalDuration: { type: Boolean, required: true },
+  estimatedRentalDuration: { type: Number },
+  installationTimeframe: { type: String, required: true },
+  mobilityAids: [{ type: String }],
+  installationAddress: { type: String, required: true },
+});
+
+const RentalRequestSchema = new mongoose.Schema({
+  firstName: String,
+  lastName: String,
+  email: String,
+  phone: String,
+  knowRampLength: String,
+  estimatedRampLength: String,
+  knowRentalDuration: String,
+  estimatedRentalDuration: String,
+  installationTimeframe: String,
+  mobilityAids: [String],
+  installAddress: String,
+  createdAt: { type: Date, default: Date.now },
+}, { strict: false });
+
+const QuoteSchema = new mongoose.Schema({
+  customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },
+  installPrice: { type: Number, required: true },
+  deliveryPrice: { type: Number, required: true },
+  monthlyRate: { type: Number, required: true },
+  components: [{ 
+    id: String,
+    name: String,
+    quantity: Number,
+    price: Number
+  }],
+  status: { type: String, default: 'DRAFT' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  sentAt: { type: Date },
+  signedAt: { type: Date },
+  paymentStatus: { type: String, default: 'PENDING' },
+});
+
+const SettingsSchema = new mongoose.Schema({
+  warehouseAddress: { type: String, required: true },
+  monthlyRatePerFt: { type: Number, required: true },
+  installRatePerComponent: { type: Number, required: true },
+  deliveryRatePerMile: { type: Number, required: true },
+});
+
+export interface ICustomer extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phoneNumber: string;
+  address: string;
+  mobilityAids: string[];
+}
+
+export interface IRampDetails extends Document {
+  knowRampLength: boolean;
+  estimatedRampLength?: number;
+  knowRentalDuration: boolean;
+  estimatedRentalDuration?: number;
+  installationTimeframe: string;
+  mobilityAids: string[];
+  installationAddress: string;
+}
+
+export interface IRentalRequest extends Document {
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string;
+  knowRampLength: string;
+  estimatedRampLength?: string;
+  knowRentalDuration: string;
+  estimatedRentalDuration?: string;
+  installationTimeframe: string;
+  mobilityAids: string[];
+  installAddress: string;
+  createdAt: Date;
+}
+
+export interface IQuote extends Document {
+  customer: mongoose.Types.ObjectId | ICustomer;
+  installPrice: number;
+  deliveryPrice: number;
+  monthlyRate: number;
+  components: {
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }[];
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+  sentAt?: Date;
+  signedAt?: Date;
+  paymentStatus: string;
+}
+
+export interface ISettings extends Document {
+  warehouseAddress: string;
+  monthlyRatePerFt: number;
+  installRatePerComponent: number;
+  deliveryRatePerMile: number;
+}
+
+export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
+export const RampDetails = mongoose.models.RampDetails || mongoose.model<IRampDetails>('RampDetails', RampDetailsSchema);
+export const RentalRequest = mongoose.models.RentalRequest || mongoose.model<IRentalRequest>('RentalRequest', RentalRequestSchema);
+export const Quote = mongoose.models.Quote || mongoose.model<IQuote>('Quote', QuoteSchema);
+export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
+
+// Remove this line:
+// export { Customer } from './Customer';
+```
+
+# src/types/next-auth.d.ts
+
+```ts
+import "next-auth";
+
+declare module "next-auth" {
+  interface Session {
+    user: {
+      id: string;
+      name?: string | null;
+      email?: string | null;
+      image?: string | null;
+    }
+  }
+}
+```
+
+# src/types/index.ts
+
+```ts
+// src/types/index.ts
+
+export interface Customer {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phoneNumber: string;
+    installAddress?: string; // Optional property
+    mobilityAids: string[];
+  }
+  
+  export interface RentalRequest {
+    _id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    knowRampLength: string;
+    estimatedRampLength: string;
+    knowRentalDuration: string;
+    estimatedRentalDuration: string;
+    installationTimeframe: string;
+    mobilityAids: string[];
+    installAddress: string;
+    createdAt: string;
+  }
+  
+  export interface RampComponent {
+    id: string;
+    name: string;
+    quantity: number;
+    price: number;
+  }
+  
+  export interface Quote {
+    _id: string;
+    customer: string | Customer;
+    installPrice: number;
+    deliveryPrice: number;
+    monthlyRate: number;
+    components: RampComponent[];
+    status: string;
+    createdAt: string;
+    updatedAt: string;
+    sentAt: string | null;
+    signedAt: string | null;
+    paymentStatus: string;
+  }
+  
+  export interface ApiResponse<T> {
+    data?: T;
+    error?: string;
+  }
+```
+
+# src/app/settings/page.tsx
+
+```tsx
+'use client';
+
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
+
+const SettingsPage: React.FC = () => {
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
+    </div>
+  );
+};
+
+export default SettingsPage;
+```
+
+# src/components/ui/Select.tsx
+
+```tsx
+import * as React from "react"
+
+export interface SelectProps
+  extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  error?: string;
+}
+
+const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, error, children, ...props }, ref) => {
+    return (
+      <div>
+        <select
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </select>
+        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+      </div>
+    )
+  }
+)
+Select.displayName = "Select"
+
+export { Select }
+```
+
+# src/components/ui/Input.tsx
+
+```tsx
+import * as React from "react"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
+  error?: string;
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, error, ...props }, ref) => {
+    return (
+      <div>
+        <input
+          type={type}
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
+          ref={ref}
+          {...props}
+        />
+        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+      </div>
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+```
+
+# src/components/ui/FormattedPhoneInput.tsx
+
+```tsx
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Input } from '@/components/ui/Input';
+
+interface FormattedPhoneInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  className?: string;
+}
+
+export const FormattedPhoneInput: React.FC<FormattedPhoneInputProps> = ({
+  value,
+  onChange,
+  error,
+  className
+}) => {
+  const [formattedValue, setFormattedValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const format = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    const chars = digits.split('');
+    let formatted = '(___) ___-____';
+    chars.forEach((char) => {
+      formatted = formatted.replace('_', char);
+    });
+    return formatted;
+  };
+
+  useEffect(() => {
+    setFormattedValue(format(value));
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const selectionStart = input.selectionStart || 0; // Provide a default value
+    const formatted = format(input.value);
+    const digits = formatted.replace(/\D/g, '');
+    
+    onChange(digits);
+
+    // Set cursor position after React updates the input
+    setTimeout(() => {
+      if (inputRef.current) {
+        const newCursorPosition = selectionStart + (formatted.length - input.value.length);
+        inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+      }
+    }, 0);
+  };
+
+  return (
+    <Input
+      ref={inputRef}
+      type="tel"
+      value={formattedValue}
+      onChange={handleChange}
+      placeholder="(___) ___-____"
+      error={error}
+      className={className}
+    />
+  );
+};
+```
+
+# src/components/ui/Checkbox.tsx
+
+```tsx
+// src/components/ui/checkbox.tsx
+
+import * as React from "react"
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
+import { Check } from "lucide-react"
+
+import { cn } from "../../lib/utils"
+
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <CheckboxPrimitive.Root
+    ref={ref}
+    className={cn(
+      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+      className
+    )}
+    {...props}
+  >
+    <CheckboxPrimitive.Indicator className={cn("flex items-center justify-center text-current")}>
+      <Check className="h-4 w-4" />
+    </CheckboxPrimitive.Indicator>
+  </CheckboxPrimitive.Root>
+))
+Checkbox.displayName = CheckboxPrimitive.Root.displayName
+
+export { Checkbox }
+```
+
+# src/components/ui/Button.tsx
+
+```tsx
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+```
+
+# src/components/ui/AddressField.tsx
+
+```tsx
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Input } from './Input';
+
+interface AddressFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  label?: string;
+  placeholder?: string;
+}
+
+declare global {
+  interface Window {
+    google: {
+      maps: {
+        places: {
+          Autocomplete: new (input: HTMLInputElement, options?: AutocompleteOptions) => google.maps.places.Autocomplete;
+        };
+      };
+    };
+  }
+}
+
+interface AutocompleteOptions {
+  types: string[];
+  componentRestrictions: { country: string };
+  fields: string[];
+}
+
+interface Place {
+  formatted_address?: string;
+}
+
+export const AddressField: React.FC<AddressFieldProps> = ({
+  value,
+  onChange,
+  error,
+  label = 'Address',
+  placeholder = 'Enter your address'
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!window.google && !isLoaded) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      script.onload = () => setIsLoaded(true);
+      document.body.appendChild(script);
+    } else if (window.google && !isLoaded) {
+      setIsLoaded(true);
+    }
+  }, [isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && inputRef.current) {
+      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+        types: ['address'],
+        componentRestrictions: { country: 'us' },
+        fields: ['formatted_address']
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace() as Place;
+        if (place.formatted_address) {
+          onChange(place.formatted_address);
+        }
+      });
+    }
+  }, [isLoaded, onChange]);
+
+  return (
+    <div>
+      <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        {label}
+      </label>
+      <Input
+        ref={inputRef}
+        id="address"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        error={error}
+        className="mt-1"
+      />
+    </div>
+  );
+};
+```
+
+# src/components/ui/ActionButton.tsx
+
+```tsx
+import React from 'react';
+import { Button } from '@/components/ui/Button';
+
+interface ActionButtonProps {
+  onClick: () => void;
+  label: string;
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+}
+
+export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, variant = 'default' }) => (
+  <Button onClick={onClick} variant={variant}>
+    {label}
+  </Button>
+);
 ```
 
 # src/components/RentalRequestForm/RentalRequestForm.tsx
@@ -3075,365 +3435,13 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
-# src/components/ui/Select.tsx
+# src/app/fonts/GeistVF.woff
 
-```tsx
-import * as React from "react"
+This is a binary file of the type: Binary
 
-export interface SelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  error?: string;
-}
+# src/app/fonts/GeistMonoVF.woff
 
-const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, error, children, ...props }, ref) => {
-    return (
-      <div>
-        <select
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
-          ref={ref}
-          {...props}
-        >
-          {children}
-        </select>
-        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
-      </div>
-    )
-  }
-)
-Select.displayName = "Select"
-
-export { Select }
-```
-
-# src/components/ui/Input.tsx
-
-```tsx
-import * as React from "react"
-
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
-  error?: string;
-}
-
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, error, ...props }, ref) => {
-    return (
-      <div>
-        <input
-          type={type}
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
-          ref={ref}
-          {...props}
-        />
-        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
-      </div>
-    )
-  }
-)
-Input.displayName = "Input"
-
-export { Input }
-```
-
-# src/components/ui/FormattedPhoneInput.tsx
-
-```tsx
-'use client';
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Input } from '@/components/ui/Input';
-
-interface FormattedPhoneInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  className?: string;
-}
-
-export const FormattedPhoneInput: React.FC<FormattedPhoneInputProps> = ({
-  value,
-  onChange,
-  error,
-  className
-}) => {
-  const [formattedValue, setFormattedValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const format = (val: string) => {
-    const digits = val.replace(/\D/g, '');
-    const chars = digits.split('');
-    let formatted = '(___) ___-____';
-    chars.forEach((char) => {
-      formatted = formatted.replace('_', char);
-    });
-    return formatted;
-  };
-
-  useEffect(() => {
-    setFormattedValue(format(value));
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const selectionStart = input.selectionStart || 0; // Provide a default value
-    const formatted = format(input.value);
-    const digits = formatted.replace(/\D/g, '');
-    
-    onChange(digits);
-
-    // Set cursor position after React updates the input
-    setTimeout(() => {
-      if (inputRef.current) {
-        const newCursorPosition = selectionStart + (formatted.length - input.value.length);
-        inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-      }
-    }, 0);
-  };
-
-  return (
-    <Input
-      ref={inputRef}
-      type="tel"
-      value={formattedValue}
-      onChange={handleChange}
-      placeholder="(___) ___-____"
-      error={error}
-      className={className}
-    />
-  );
-};
-```
-
-# src/components/ui/Checkbox.tsx
-
-```tsx
-// src/components/ui/checkbox.tsx
-
-import * as React from "react"
-import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { Check } from "lucide-react"
-
-import { cn } from "../../lib/utils"
-
-const Checkbox = React.forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-      className
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator className={cn("flex items-center justify-center text-current")}>
-      <Check className="h-4 w-4" />
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-))
-Checkbox.displayName = CheckboxPrimitive.Root.displayName
-
-export { Checkbox }
-```
-
-# src/components/ui/Button.tsx
-
-```tsx
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
-
-import { cn } from "@/lib/utils"
-
-const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-}
-
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
-    return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Button.displayName = "Button"
-
-export { Button, buttonVariants }
-```
-
-# src/components/ui/AddressField.tsx
-
-```tsx
-'use client';
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Input } from './Input';
-
-interface AddressFieldProps {
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  label?: string;
-  placeholder?: string;
-}
-
-declare global {
-  interface Window {
-    google: {
-      maps: {
-        places: {
-          Autocomplete: new (input: HTMLInputElement, options?: AutocompleteOptions) => google.maps.places.Autocomplete;
-        };
-      };
-    };
-  }
-}
-
-interface AutocompleteOptions {
-  types: string[];
-  componentRestrictions: { country: string };
-  fields: string[];
-}
-
-interface Place {
-  formatted_address?: string;
-}
-
-export const AddressField: React.FC<AddressFieldProps> = ({
-  value,
-  onChange,
-  error,
-  label = 'Address',
-  placeholder = 'Enter your address'
-}) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!window.google && !isLoaded) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      script.onload = () => setIsLoaded(true);
-      document.body.appendChild(script);
-    } else if (window.google && !isLoaded) {
-      setIsLoaded(true);
-    }
-  }, [isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded && inputRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-        types: ['address'],
-        componentRestrictions: { country: 'us' },
-        fields: ['formatted_address']
-      });
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace() as Place;
-        if (place.formatted_address) {
-          onChange(place.formatted_address);
-        }
-      });
-    }
-  }, [isLoaded, onChange]);
-
-  return (
-    <div>
-      <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-        {label}
-      </label>
-      <Input
-        ref={inputRef}
-        id="address"
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        error={error}
-        className="mt-1"
-      />
-    </div>
-  );
-};
-```
-
-# src/components/ui/ActionButton.tsx
-
-```tsx
-import React from 'react';
-import { Button } from '@/components/ui/Button';
-
-interface ActionButtonProps {
-  onClick: () => void;
-  label: string;
-  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
-}
-
-export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, variant = 'default' }) => (
-  <Button onClick={onClick} variant={variant}>
-    {label}
-  </Button>
-);
-```
-
-# src/app/settings/page.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import PricingVariables from '@/components/PricingVariables';
-
-const SettingsPage: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <PricingVariables />
-    </div>
-  );
-};
-
-export default SettingsPage;
-```
+This is a binary file of the type: Binary
 
 # src/app/rental-requests/page.tsx
 
@@ -3612,13 +3620,21 @@ export default function LoginPage() {
 }
 ```
 
-# src/app/fonts/GeistVF.woff
+# src/app/customers/page.tsx
 
-This is a binary file of the type: Binary
+```tsx
+import React from 'react';
+import CustomerList from '@/components/CustomerList';
 
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
+export default function Customers() {
+  return (
+    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold mb-6">Customers</h1>
+      <CustomerList />
+    </div>
+  );
+}
+```
 
 # src/app/embed/page.tsx
 
@@ -3641,22 +3657,6 @@ export default function EmbedPage() {
         </li>
       </ol>
       <p>The form will automatically render inside the container div.</p>
-    </div>
-  );
-}
-```
-
-# src/app/customers/page.tsx
-
-```tsx
-import React from 'react';
-import CustomerList from '@/components/CustomerList';
-
-export default function Customers() {
-  return (
-    <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Customers</h1>
-      <CustomerList />
     </div>
   );
 }
@@ -3954,6 +3954,371 @@ export default function QuotePage({ params }: { params: { id: string } }) {
 }
 ```
 
+# src/app/api/register/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { clientPromise } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export async function POST(request: Request) {
+  try {
+    const { username, email, password } = await request.json();
+
+    if (!username || !email || !password) {
+      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
+    }
+
+    const client = await clientPromise;
+    const db = client.db();
+
+    // Check if user already exists
+    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+    if (existingUser) {
+      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create new user
+    const result = await db.collection('users').insertOne({
+      username,
+      email,
+      password: hashedPassword,
+    });
+
+    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
+  } catch (error) {
+    console.error('Registration error:', error);
+    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/send-quote/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Quote } from '@/models';
+// Import necessary modules for email sending, Stripe, and esignatures.io
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const { quoteId } = await request.json();
+    const quote = await Quote.findById(quoteId).populate('customer');
+    
+    if (!quote) {
+      return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
+    }
+
+    // TODO: Implement email sending logic
+    // const emailResult = await sendEmail(quote.customer.email, quote);
+
+    // TODO: Implement Stripe payment link generation
+    // const paymentLink = await createStripePaymentLink(quote);
+
+    // TODO: Implement esignatures.io agreement link generation
+    // const agreementLink = await createESignatureAgreement(quote);
+
+    // Update quote status
+    quote.status = 'SENT';
+    quote.sentAt = new Date();
+    await quote.save();
+
+    return NextResponse.json({ 
+      message: 'Quote sent successfully',
+      // emailResult,
+      // paymentLink,
+      // agreementLink
+    });
+  } catch (error) {
+    console.error('Error sending quote:', error);
+    return NextResponse.json({ error: 'Failed to send quote' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/rental-requests/route.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { RentalRequest } from '@/models';
+import { allowedOrigins } from '@/config/cors';
+
+// Define the ApiResponse type
+type ApiResponse<T> = {
+  data?: T;
+  error?: string;
+};
+
+// Updated CORS function
+function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
+  const origin = req.headers.get('origin');
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+  } else {
+    res.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
+}
+
+export async function OPTIONS(req: NextRequest) {
+  const res = new NextResponse(null, { status: 200 });
+  return setCORSHeaders(req, res);
+}
+
+export async function POST(req: NextRequest) {
+  await dbConnect();
+
+  try {
+    const body = await req.json();
+    console.log('Received body:', body);
+
+    // Create a new rental request
+    const newRentalRequest = new RentalRequest(body);
+    await newRentalRequest.save();
+
+    const response: ApiResponse<typeof body> = { data: body };
+    const res = NextResponse.json(response, { status: 201 });
+    return setCORSHeaders(req, res);
+  } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response: ApiResponse<never> = { error: errorMessage };
+    const res = NextResponse.json(response, { status: 500 });
+    return setCORSHeaders(req, res);
+  }
+}
+
+export async function GET(req: NextRequest) {
+  await dbConnect();
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    const response: ApiResponse<typeof rentalRequests> = { data: rentalRequests };
+    const res = NextResponse.json(response);
+    return setCORSHeaders(req, res);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response: ApiResponse<never> = { error: errorMessage };
+    const res = NextResponse.json(response, { status: 500 });
+    return setCORSHeaders(req, res);
+  }
+}
+```
+
+# src/app/api/embed/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+
+export async function GET() {
+  const filePath = path.join(process.cwd(), 'public', 'standalone-form.js');
+  const fileContents = fs.readFileSync(filePath, 'utf8');
+
+  return new NextResponse(fileContents, {
+    headers: {
+      'Content-Type': 'application/javascript',
+    },
+  });
+}
+```
+
+# src/app/api/settings/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Settings } from '@/models';
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const settings = await Settings.findOne();
+    return NextResponse.json({ data: settings });
+  } catch (error) {
+    console.error('Error fetching settings:', error);
+    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
+    return NextResponse.json({ data: settings });
+  } catch (error) {
+    console.error('Error updating settings:', error);
+    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    console.error('GOOGLE_MAPS_API_KEY is not set');
+    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
+  }
+
+  try {
+    const response = await client.distancematrix({
+      params: {
+        origins: [origin],
+        destinations: [destination],
+        key: apiKey,
+      },
+    });
+
+    if (response.data.rows[0].elements[0].status === 'OK') {
+      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+      return NextResponse.json({ distance });
+    } else {
+      console.error('Google Maps API error:', response.data);
+      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
+    }
+  } catch (error) {
+    console.error('Error calculating distance:', error);
+    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/customers/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Customer } from '@/models';
+import { ApiResponse, Customer as CustomerType } from '@/types';
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    console.log('Received customer data:', data);
+
+    const customer = await Customer.create(data);
+    const response: ApiResponse<{ id: string, customer: CustomerType }> = {
+      data: { 
+        id: customer._id.toString(),
+        customer: customer.toObject() 
+      },
+    };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating customer:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    const response: ApiResponse<never> = {
+      error: `Failed to create customer: ${errorMessage}`,
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const customers = await Customer.find().sort({ createdAt: -1 });
+    const response: ApiResponse<CustomerType[]> = { data: customers };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch customers',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
+# src/app/api/quotes/route.ts
+
+```ts
+// src/app/api/quotes/route.ts
+
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Quote, IQuote } from '@/models';
+import { ApiResponse } from '@/types'; // Import ApiResponse type
+
+export async function GET() {
+  await dbConnect();
+
+  try {
+    const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
+    const response: ApiResponse<IQuote[]> = { data: quotes };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching quotes:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch quotes',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function POST(request: Request) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    console.log('Received quote data:', data);
+
+    // Validate required fields
+    if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    const quote = await Quote.create(data);
+    console.log('Quote created:', quote);
+
+    const populatedQuote = await Quote.findById(quote._id).populate('customer');
+    console.log('Quote populated:', populatedQuote);
+
+    const response: ApiResponse<IQuote> = { data: populatedQuote };
+    return NextResponse.json(response, { status: 201 });
+  } catch (error) {
+    console.error('Error creating quote:', error);
+    const response: ApiResponse<never> = { error: 'Failed to create quote' };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+```
+
 # src/app/customers/[id]/page.tsx
 
 ```tsx
@@ -4141,401 +4506,103 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
 }
 ```
 
-# src/app/api/settings/route.ts
+# src/app/api/auth/[...nextauth]/route.ts
 
 ```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Settings } from '@/models';
+import NextAuth from "next-auth";
+import { authOptions } from "./auth";
 
-export async function GET() {
-  await dbConnect();
+const handler = NextAuth(authOptions);
 
-  try {
-    const settings = await Settings.findOne();
-    return NextResponse.json({ data: settings });
-  } catch (error) {
-    console.error('Error fetching settings:', error);
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 });
-  }
-}
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const settings = await Settings.findOneAndUpdate({}, data, { new: true, upsert: true });
-    return NextResponse.json({ data: settings });
-  } catch (error) {
-    console.error('Error updating settings:', error);
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
-  }
-}
+export { handler as GET, handler as POST };
 ```
 
-# src/app/api/send-quote/route.ts
+# src/app/api/auth/[...nextauth]/auth.ts
 
 ```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Quote } from '@/models';
-// Import necessary modules for email sending, Stripe, and esignatures.io
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const { quoteId } = await request.json();
-    const quote = await Quote.findById(quoteId).populate('customer');
-    
-    if (!quote) {
-      return NextResponse.json({ error: 'Quote not found' }, { status: 404 });
-    }
-
-    // TODO: Implement email sending logic
-    // const emailResult = await sendEmail(quote.customer.email, quote);
-
-    // TODO: Implement Stripe payment link generation
-    // const paymentLink = await createStripePaymentLink(quote);
-
-    // TODO: Implement esignatures.io agreement link generation
-    // const agreementLink = await createESignatureAgreement(quote);
-
-    // Update quote status
-    quote.status = 'SENT';
-    quote.sentAt = new Date();
-    await quote.save();
-
-    return NextResponse.json({ 
-      message: 'Quote sent successfully',
-      // emailResult,
-      // paymentLink,
-      // agreementLink
-    });
-  } catch (error) {
-    console.error('Error sending quote:', error);
-    return NextResponse.json({ error: 'Failed to send quote' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/rental-requests/route.ts
-
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { z } from 'zod';
-import { dbConnect } from '@/lib/mongodb';
-import { RentalRequest, IRentalRequest } from '@/models';
-import { allowedOrigins } from '@/config/cors';
-
-// Define the RentalRequestType
-type RentalRequestType = z.infer<typeof RentalRequestSchema>;
-
-// Define the ApiResponse type
-type ApiResponse<T> = {
-  data?: T;
-  error?: string;
-};
-
-// Define the schema for input validation
-const RentalRequestSchema = z.object({
-  firstName: z.string().min(1).max(50),
-  lastName: z.string().min(1).max(50),
-  email: z.string().email(),
-  phone: z.string().regex(/^\+?[1-9]\d{1,14}$/),
-  knowRampLength: z.enum(['yes', 'no']),
-  estimatedRampLength: z.string().optional(),
-  knowRentalDuration: z.enum(['yes', 'no']),
-  estimatedRentalDuration: z.string().optional(),
-  installationTimeframe: z.string(),
-  mobilityAids: z.array(z.string()),
-  installAddress: z.string(),
-});
-
-// Updated CORS function
-function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
-  const origin = req.headers.get('origin');
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    res.headers.set('Access-Control-Allow-Origin', origin);
-  } else {
-    // If the origin is not in the list, you might want to deny the request
-    // or set a default origin. Here we're setting it to the first allowed origin.
-    res.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
-  
-  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
-  return res;
-}
-
-export async function OPTIONS(req: NextRequest) {
-  const res = new NextResponse(null, { status: 200 });
-  return setCORSHeaders(req, res);
-}
-
-export async function POST(req: NextRequest) {
-  await dbConnect();
-
-  try {
-    const body = await req.json();
-    console.log('Received body:', body);
-
-    const validatedData = RentalRequestSchema.parse(body);
-
-    // Save the validated data to the database
-    const newRentalRequest = new RentalRequest(validatedData);
-    await newRentalRequest.save();
-
-    const response: ApiResponse<RentalRequestType> = { data: validatedData };
-    const res = NextResponse.json(response, { status: 201 });
-    return setCORSHeaders(req, res);
-  } catch (error) {
-    console.error('Error in POST /api/rental-requests:', error);
-    let response: ApiResponse<never>;
-    let status: number;
-
-    if (error instanceof z.ZodError) {
-      console.log('Validation errors:', error.errors);
-      response = { error: JSON.stringify(error.errors) };
-      status = 400;
-    } else {
-      response = { error: 'Internal Server Error' };
-      status = 500;
-    }
-
-    const res = NextResponse.json(response, { status });
-    return setCORSHeaders(req, res);
-  }
-}
-
-export async function GET(req: NextRequest) {
-  await dbConnect();
-
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    const response: ApiResponse<IRentalRequest[]> = { data: rentalRequests };
-    const res = NextResponse.json(response);
-    return setCORSHeaders(req, res);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response: ApiResponse<never> = { error: errorMessage };
-    const res = NextResponse.json(response, { status: 500 });
-    return setCORSHeaders(req, res);
-  }
-}
-```
-
-# src/app/api/register/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
 import { clientPromise } from '@/lib/mongodb';
+import { NextAuthOptions } from "next-auth";
+import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from 'bcryptjs';
 
-export async function POST(request: Request) {
-  try {
-    const { username, email, password } = await request.json();
-
-    if (!username || !email || !password) {
-      return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
-    }
-
-    const client = await clientPromise;
-    const db = client.db();
-
-    // Check if user already exists
-    const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-    if (existingUser) {
-      return NextResponse.json({ message: 'Username or email already exists' }, { status: 400 });
-    }
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Create new user
-    const result = await db.collection('users').insertOne({
-      username,
-      email,
-      password: hashedPassword,
-    });
-
-    return NextResponse.json({ message: 'User registered successfully', userId: result.insertedId }, { status: 201 });
-  } catch (error) {
-    console.error('Registration error:', error);
-    return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
-  }
+if (!process.env.NEXTAUTH_SECRET) {
+  console.error("Warning: NEXTAUTH_SECRET is not set");
 }
-```
 
-# src/app/api/embed/route.ts
+const isProduction = process.env.NODE_ENV === 'production';
 
-```ts
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('NEXTAUTH_SECRET:', process.env.NEXTAUTH_SECRET ? 'is set' : 'is not set');
+console.log('Is Production:', isProduction);
 
-export async function GET() {
-  const filePath = path.join(process.cwd(), 'public', 'standalone-form.js');
-  const fileContents = fs.readFileSync(filePath, 'utf8');
+export const authOptions: NextAuthOptions = {
+  providers: [
+    CredentialsProvider({
+      name: "Credentials",
+      credentials: {
+        username: { label: "Username", type: "text" },
+        password: { label: "Password", type: "password" }
+      },
+      async authorize(credentials) {
+        if (!credentials?.username || !credentials?.password) {
+          throw new Error("Missing username or password");
+        }
 
-  return new NextResponse(fileContents, {
-    headers: {
-      'Content-Type': 'application/javascript',
+        try {
+          const client = await clientPromise;
+          const db = client.db();
+          const user = await db.collection('users').findOne({ username: credentials.username });
+
+          if (!user) {
+            throw new Error("User not found");
+          }
+
+          const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+
+          if (!isPasswordValid) {
+            throw new Error("Invalid password");
+          }
+
+          return { id: user._id.toString(), name: user.username, email: user.email };
+        } catch (error) {
+          console.error("Authentication error:", error);
+          return null;
+        }
+      }
+    })
+  ],
+  pages: {
+    signIn: '/login',
+  },
+  callbacks: {
+    async jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+      }
+      return token;
     },
-  });
-}
-```
+    async session({ session, token }) {
+      if (session.user) {
+        session.user.id = token.id as string;
+      }
+      return session;
+    },
+  },
+  session: {
+    strategy: "jwt",
+    maxAge: 30 * 24 * 60 * 60, // 30 days
+  },
+  secret: process.env.NEXTAUTH_SECRET || (isProduction ? undefined : 'DEVELOPMENT_SECRET'),
+  debug: !isProduction,
+};
 
-# src/app/api/quotes/route.ts
-
-```ts
-// src/app/api/quotes/route.ts
-
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Quote, IQuote } from '@/models';
-import { ApiResponse } from '@/types'; // Import ApiResponse type
-
-export async function GET() {
-  await dbConnect();
-
-  try {
-    const quotes = await Quote.find().populate('customer').sort({ createdAt: -1 });
-    const response: ApiResponse<IQuote[]> = { data: quotes };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error fetching quotes:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch quotes',
-    };
-    return NextResponse.json(response, { status: 500 });
+if (isProduction) {
+  console.log("Running in production mode");
+  if (!process.env.NEXTAUTH_SECRET) {
+    console.error("Error: NEXTAUTH_SECRET must be set in production");
   }
-}
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    console.log('Received quote data:', data);
-
-    // Validate required fields
-    if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
-    }
-
-    const quote = await Quote.create(data);
-    console.log('Quote created:', quote);
-
-    const populatedQuote = await Quote.findById(quote._id).populate('customer');
-    console.log('Quote populated:', populatedQuote);
-
-    const response: ApiResponse<IQuote> = { data: populatedQuote };
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Error creating quote:', error);
-    const response: ApiResponse<never> = { error: 'Failed to create quote' };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    return NextResponse.json({ error: 'Origin and destination are required' }, { status: 400 });
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    console.error('GOOGLE_MAPS_API_KEY is not set');
-    return NextResponse.json({ error: 'Server configuration error' }, { status: 500 });
-  }
-
-  try {
-    const response = await client.distancematrix({
-      params: {
-        origins: [origin],
-        destinations: [destination],
-        key: apiKey,
-      },
-    });
-
-    if (response.data.rows[0].elements[0].status === 'OK') {
-      const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-      return NextResponse.json({ distance });
-    } else {
-      console.error('Google Maps API error:', response.data);
-      return NextResponse.json({ error: 'Unable to calculate distance' }, { status: 500 });
-    }
-  } catch (error) {
-    console.error('Error calculating distance:', error);
-    return NextResponse.json({ error: 'Failed to calculate distance' }, { status: 500 });
-  }
-}
-```
-
-# src/app/api/customers/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Customer } from '@/models';
-import { ApiResponse, Customer as CustomerType } from '@/types';
-
-export async function POST(request: Request) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    console.log('Received customer data:', data);
-
-    const customer = await Customer.create(data);
-    const response: ApiResponse<{ id: string, customer: CustomerType }> = {
-      data: { 
-        id: customer._id.toString(),
-        customer: customer.toObject() 
-      },
-    };
-    return NextResponse.json(response, { status: 201 });
-  } catch (error) {
-    console.error('Error creating customer:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    const response: ApiResponse<never> = {
-      error: `Failed to create customer: ${errorMessage}`,
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-
-export async function GET() {
-  await dbConnect();
-
-  try {
-    const customers = await Customer.find().sort({ createdAt: -1 });
-    const response: ApiResponse<CustomerType[]> = { data: customers };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error fetching customers:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch customers',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
+} else {
+  console.log("Running in development mode");
 }
 ```
 
@@ -4586,6 +4653,88 @@ export async function PUT(request: Request, { params }: { params: { id: string }
     return NextResponse.json(updatedRentalRequest);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to update rental request' }, { status: 500 });
+  }
+}
+```
+
+# src/app/api/customers/[id]/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Customer } from '@/models';
+import { ApiResponse, Customer as CustomerType } from '@/types';
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  await dbConnect();
+
+  try {
+    if (!params.id) {
+      throw new Error('Customer ID is required');
+    }
+
+    const customer = await Customer.findById(params.id);
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+    const response: ApiResponse<CustomerType> = { data: customer.toObject() };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error fetching customer:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to fetch customer',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  await dbConnect();
+
+  try {
+    const data = await request.json();
+    const customer = await Customer.findByIdAndUpdate(params.id, data, { new: true });
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+    const response: ApiResponse<CustomerType> = { data: customer };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error updating customer:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to update customer',
+    };
+    return NextResponse.json(response, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  await dbConnect();
+
+  try {
+    const customer = await Customer.findByIdAndDelete(params.id);
+    if (!customer) {
+      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
+    }
+    const response: ApiResponse<{ message: string }> = { 
+      data: { message: 'Customer deleted successfully' } 
+    };
+    return NextResponse.json(response);
+  } catch (error) {
+    console.error('Error deleting customer:', error);
+    const response: ApiResponse<never> = {
+      error: 'Failed to delete customer',
+    };
+    return NextResponse.json(response, { status: 500 });
   }
 }
 ```
@@ -4731,188 +4880,6 @@ export async function GET(request: Request) {
     console.error('Error searching customers:', error);
     return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
   }
-}
-```
-
-# src/app/api/customers/[id]/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Customer } from '@/models';
-import { ApiResponse, Customer as CustomerType } from '@/types';
-
-export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  await dbConnect();
-
-  try {
-    if (!params.id) {
-      throw new Error('Customer ID is required');
-    }
-
-    const customer = await Customer.findById(params.id);
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-    const response: ApiResponse<CustomerType> = { data: customer.toObject() };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error fetching customer:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to fetch customer',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-
-export async function PUT(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  await dbConnect();
-
-  try {
-    const data = await request.json();
-    const customer = await Customer.findByIdAndUpdate(params.id, data, { new: true });
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-    const response: ApiResponse<CustomerType> = { data: customer };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error updating customer:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to update customer',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-
-export async function DELETE(
-  request: Request,
-  { params }: { params: { id: string } }
-) {
-  await dbConnect();
-
-  try {
-    const customer = await Customer.findByIdAndDelete(params.id);
-    if (!customer) {
-      return NextResponse.json({ error: 'Customer not found' }, { status: 404 });
-    }
-    const response: ApiResponse<{ message: string }> = { 
-      data: { message: 'Customer deleted successfully' } 
-    };
-    return NextResponse.json(response);
-  } catch (error) {
-    console.error('Error deleting customer:', error);
-    const response: ApiResponse<never> = {
-      error: 'Failed to delete customer',
-    };
-    return NextResponse.json(response, { status: 500 });
-  }
-}
-```
-
-# src/app/api/auth/[...nextauth]/route.ts
-
-```ts
-import NextAuth from "next-auth";
-import { authOptions } from "./auth";
-
-const handler = NextAuth(authOptions);
-
-export { handler as GET, handler as POST };
-```
-
-# src/app/api/auth/[...nextauth]/auth.ts
-
-```ts
-import { clientPromise } from '@/lib/mongodb';
-import { NextAuthOptions } from "next-auth";
-import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from 'bcryptjs';
-
-if (!process.env.NEXTAUTH_SECRET) {
-  console.error("Warning: NEXTAUTH_SECRET is not set");
-}
-
-const isProduction = process.env.NODE_ENV === 'production';
-
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('NEXTAUTH_SECRET:', process.env.NEXTAUTH_SECRET ? 'is set' : 'is not set');
-console.log('Is Production:', isProduction);
-
-export const authOptions: NextAuthOptions = {
-  providers: [
-    CredentialsProvider({
-      name: "Credentials",
-      credentials: {
-        username: { label: "Username", type: "text" },
-        password: { label: "Password", type: "password" }
-      },
-      async authorize(credentials) {
-        if (!credentials?.username || !credentials?.password) {
-          throw new Error("Missing username or password");
-        }
-
-        try {
-          const client = await clientPromise;
-          const db = client.db();
-          const user = await db.collection('users').findOne({ username: credentials.username });
-
-          if (!user) {
-            throw new Error("User not found");
-          }
-
-          const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
-
-          if (!isPasswordValid) {
-            throw new Error("Invalid password");
-          }
-
-          return { id: user._id.toString(), name: user.username, email: user.email };
-        } catch (error) {
-          console.error("Authentication error:", error);
-          return null;
-        }
-      }
-    })
-  ],
-  pages: {
-    signIn: '/login',
-  },
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        token.id = user.id;
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-      }
-      return session;
-    },
-  },
-  session: {
-    strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
-  },
-  secret: process.env.NEXTAUTH_SECRET || (isProduction ? undefined : 'DEVELOPMENT_SECRET'),
-  debug: !isProduction,
-};
-
-if (isProduction) {
-  console.log("Running in production mode");
-  if (!process.env.NEXTAUTH_SECRET) {
-    console.error("Error: NEXTAUTH_SECRET must be set in production");
-  }
-} else {
-  console.log("Running in development mode");
 }
 ```
 
