@@ -1,46 +1,54 @@
-import { NextRequest } from 'next/server';
-import { createApiHandler } from '@/lib/apiHandler';
+import { NextRequest, NextResponse } from 'next/server';
 import { RentalRequest } from '@/models';
-import { RentalRequest as RentalRequestType, RentalRequestCreateRequest, ApiResponse } from '@/types';
-import { rateLimit } from '@/lib/rate-limit';
-import { corsMiddleware } from '@/lib/cors';
+import { RentalRequest as RentalRequestCreateRequest } from '@/types';
 
-const limiter = rateLimit(10, 60 * 1000); // 10 requests per minute
-
-export async function OPTIONS(req: NextRequest) {
-  return corsMiddleware(req);
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
 
-export const POST = createApiHandler<RentalRequestType>(async (request: NextRequest): Promise<ApiResponse<RentalRequestType>> => {
-  // Apply rate limiting
-  if (!limiter.check(request, 'RENTAL_REQUEST_CREATE')) {
-    return { error: 'Rate limit exceeded' };
-  }
-
+export async function POST(request: NextRequest) {
   try {
     const body: RentalRequestCreateRequest = await request.json();
     console.log('Received body:', body);
 
     // Basic validation
     if (!body.firstName || !body.lastName || !body.email || !body.phone) {
-      return { error: 'Missing required fields' };
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
     // Create a new rental request
     const newRentalRequest = await RentalRequest.create(body);
-    return { data: newRentalRequest.toObject() };
+    
+    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
   } catch (error) {
-    console.error('Error creating rental request:', error);
-    return { error: 'Failed to create rental request' };
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
   }
-});
+}
 
-export const GET = createApiHandler<RentalRequestType[]>(async (): Promise<ApiResponse<RentalRequestType[]>> => {
+export async function GET() {
   try {
     const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    return { data: rentalRequests.map(request => request.toObject()) };
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
   } catch (error) {
-    console.error('Error fetching rental requests:', error);
-    return { error: 'Failed to fetch rental requests' };
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    return response;
   }
-});
+}
