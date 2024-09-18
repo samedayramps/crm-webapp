@@ -4,7 +4,7 @@
 import React from 'react';
 import { SessionProvider } from "next-auth/react";
 import { Provider } from 'react-redux';
-import { store } from '../store';  // Updated import path
+import { store } from '../store';
 import Header from '@/components/Header';
 import '@/styles/globals.css';
 import AuthWrapper from '@/components/AuthWrapper';

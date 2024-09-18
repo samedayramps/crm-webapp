@@ -4,6 +4,7 @@ import { Customer } from '@/types';
 interface CustomerDetailsProps {
   customer: Customer;
   showActions: boolean;
+  onCustomerUpdate?: (updatedCustomer: Customer) => void;
 }
 
 const CustomerDetails: React.FC<CustomerDetailsProps> = ({ customer, showActions }) => {

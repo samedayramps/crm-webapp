@@ -134,7 +134,7 @@ module.exports = {
     "lucide-react": "^0.441.0",
     "mongodb": "^5.9.2",
     "mongoose": "^8.6.2",
-    "next": "14.2.11",
+    "next": "^14.2.12",
     "next-auth": "^4.24.7",
     "react": "^18",
     "react-dom": "^18",
@@ -4800,41 +4800,54 @@ export const config = {
 # src/utils/api.ts
 
 ```ts
-// src/utils/api.ts
+import axios from 'axios';
 
-import { ApiResponse } from '../types';
+const api = axios.create({
+  baseURL: '/api',
+});
 
-async function fetchAPI<T>(
-  endpoint: string,
-  method: string = 'GET',
-  body?: object
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(endpoint, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('API error:', error);
-    return { error: error instanceof Error ? error.message : 'An unknown error occurred' };
-  }
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
 }
 
-export const api = {
-  get: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`),
-  post: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'POST', body),
-  put: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'PUT', body),
-  delete: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`, 'DELETE'),
+export const apiClient = {
+  get: async <T>(url: string): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.get<T>(url);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while fetching data' };
+    }
+  },
+  post: async <T>(url: string, data: unknown): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.post<T>(url, data);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while posting data' };
+    }
+  },
+  put: async <T>(url: string, data: unknown): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.put<T>(url, data);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while updating data' };
+    }
+  },
+  delete: async <T>(url: string): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.delete<T>(url);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while deleting data' };
+    }
+  },
 };
 ```
 
@@ -4942,12 +4955,27 @@ export interface QuoteCreateRequest {
   status: string;
 }
 
+export interface QuoteData {
+  customer: string; // Assuming this is the customer ID
+  installPrice: number;
+  deliveryPrice: number;
+  monthlyRate: number;
+  components: RampComponent[];
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  createdAt: string;
+  sentAt: string | null;
+  signedAt: string | null;
+  paymentStatus: 'PENDING' | 'PAID';
+}
+
 export interface Settings {
   _id: string;
   warehouseAddress: string;
   monthlyRatePerFt: number;
   installRatePerComponent: number;
   deliveryRatePerMile: number;
+  baseInstallFee: number;  // Add this line
+  baseDeliveryFee: number;  // Add this line
 }
 
 export interface SettingsUpdateRequest {
@@ -4955,6 +4983,8 @@ export interface SettingsUpdateRequest {
   monthlyRatePerFt?: number;
   installRatePerComponent?: number;
   deliveryRatePerMile?: number;
+  baseInstallFee?: number;  // Add this line
+  baseDeliveryFee?: number;  // Add this line
 }
 
 export interface ApiResponse<T> {
@@ -5016,6 +5046,251 @@ body {
   }
 }
 
+```
+
+# src/store/settingsSlice.ts
+
+```ts
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { Settings, SettingsUpdateRequest } from '@/types';
+import { apiClient } from '@/utils/api';
+
+interface SettingsState {
+  settings: Settings | null;
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: SettingsState = {
+  settings: null,
+  loading: false,
+  error: null,
+};
+
+export const fetchSettings = createAsyncThunk<Settings, void, { rejectValue: string }>(
+  'settings/fetchSettings',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get<Settings>('/settings');
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch settings');
+      }
+    } catch (error) {
+      return rejectWithValue((error as Error).message || 'Failed to fetch settings');
+    }
+  }
+);
+
+export const updateSettings = createAsyncThunk<Settings, SettingsUpdateRequest, { rejectValue: string }>(
+  'settings/updateSettings',
+  async (settingsData, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post<Settings>('/settings', settingsData);
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to update settings');
+      }
+    } catch (error) {
+      return rejectWithValue((error as Error).message || 'Failed to update settings');
+    }
+  }
+);
+
+const settingsSlice = createSlice({
+  name: 'settings',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchSettings.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchSettings.fulfilled, (state, action) => {
+        state.settings = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchSettings.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload || 'An error occurred';
+      })
+      .addCase(updateSettings.fulfilled, (state, action) => {
+        state.settings = action.payload;
+      });
+  },
+});
+
+export default settingsSlice.reducer;
+```
+
+# src/store/quotesSlice.ts
+
+```ts
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { Quote, QuoteCreateRequest } from '@/types';
+import { apiClient } from '@/utils/api';
+
+interface QuotesState {
+  quotes: Quote[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: QuotesState = {
+  quotes: [],
+  loading: false,
+  error: null,
+};
+
+export const fetchQuotes = createAsyncThunk<Quote[], void, { rejectValue: string }>(
+  'quotes/fetchQuotes',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get<Quote[]>('/quotes');
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch quotes');
+      }
+    } catch (error) {
+      return rejectWithValue('Failed to fetch quotes');
+    }
+  }
+);
+
+export const createQuote = createAsyncThunk<Quote, QuoteCreateRequest, { rejectValue: string }>(
+  'quotes/createQuote',
+  async (quoteData, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.post<Quote>('/quotes', quoteData);
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to create quote');
+      }
+    } catch (error) {
+      return rejectWithValue((error as Error).message || 'Failed to create quote');
+    }
+  }
+);
+
+const quotesSlice = createSlice({
+  name: 'quotes',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchQuotes.pending, (state) => {
+        state.loading = true;
+      })
+      .addCase(fetchQuotes.fulfilled, (state, action) => {
+        state.quotes = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchQuotes.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload ?? 'Failed to fetch quotes';
+      })
+      .addCase(createQuote.fulfilled, (state, action) => {
+        state.quotes.push(action.payload);
+      });
+  },
+});
+
+export default quotesSlice.reducer;
+```
+
+# src/store/index.ts
+
+```ts
+import { configureStore } from '@reduxjs/toolkit';
+import quotesReducer from './quotesSlice';
+import customersReducer from './customersSlice';
+import settingsReducer from './settingsSlice';
+
+export const store = configureStore({
+  reducer: {
+    quotes: quotesReducer,
+    customers: customersReducer,
+    settings: settingsReducer,
+  },
+});
+
+export type RootState = ReturnType<typeof store.getState>;
+export type AppDispatch = typeof store.dispatch;
+```
+
+# src/store/hooks.ts
+
+```ts
+import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
+import type { RootState, AppDispatch } from './index';
+
+export const useAppDispatch = () => useDispatch<AppDispatch>();
+export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
+```
+
+# src/store/customersSlice.ts
+
+```ts
+import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
+import { Customer } from '@/types';
+import { apiClient } from '@/utils/api';
+
+interface CustomersState {
+  customers: Customer[];
+  loading: boolean;
+  error: string | null;
+}
+
+const initialState: CustomersState = {
+  customers: [],
+  loading: false,
+  error: null,
+};
+
+export const fetchCustomers = createAsyncThunk<Customer[], void, { rejectValue: string }>(
+  'customers/fetchCustomers',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await apiClient.get<Customer[]>('/customers');
+      console.log('API response:', response);
+      if (response.data) {
+        return Array.isArray(response.data) ? response.data : [];
+      } else {
+        throw new Error(response.error || 'Failed to fetch customers');
+      }
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      return rejectWithValue((error as Error).message || 'Failed to fetch customers');
+    }
+  }
+);
+
+const customersSlice = createSlice({
+  name: 'customers',
+  initialState,
+  reducers: {},
+  extraReducers: (builder) => {
+    builder
+      .addCase(fetchCustomers.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchCustomers.fulfilled, (state, action) => {
+        state.customers = action.payload;
+        state.loading = false;
+      })
+      .addCase(fetchCustomers.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload ?? 'Failed to fetch customers';
+      });
+  },
+});
+
+export default customersSlice.reducer;
 ```
 
 # src/services/settingsService.ts
@@ -5229,51 +5504,94 @@ import { Customer, CustomerCreateRequest } from '@/types';
 export class CustomerService {
   static async createCustomer(data: CustomerCreateRequest): Promise<Customer> {
     try {
-      const customer = await CustomerModel.create(data);
+      const customerData = {
+        ...data,
+        mobilityAids: data.mobilityAids || []
+      };
+      const customer = await CustomerModel.create(customerData);
+      console.log('Customer created:', customer);
       return customer.toObject();
     } catch (error) {
       console.error('Error creating customer:', error);
-      throw error;
+      throw new Error('Failed to create customer');
+    }
+  }
+
+  static async createCustomerFromRentalRequest(data: CustomerCreateRequest): Promise<Customer> {
+    try {
+      const customerData = {
+        ...data,
+        mobilityAids: data.mobilityAids || []
+      };
+      const customer = await CustomerModel.create(customerData);
+      console.log('Customer created from rental request:', customer);
+      return customer.toObject();
+    } catch (error) {
+      console.error('Error creating customer from rental request:', error);
+      throw new Error('Failed to create customer from rental request');
     }
   }
 
   static async getAllCustomers(): Promise<Customer[]> {
     try {
       const customers = await CustomerModel.find().sort({ createdAt: -1 });
+      console.log(`Fetched ${customers.length} customers`);
       return customers.map(customer => customer.toObject());
     } catch (error) {
       console.error('Error fetching customers:', error);
-      throw error;
+      throw new Error('Failed to fetch customers');
     }
   }
 
   static async getCustomerById(id: string): Promise<Customer | null> {
     try {
       const customer = await CustomerModel.findById(id);
-      return customer ? customer.toObject() : null;
+      if (customer) {
+        console.log('Customer found:', customer);
+        return customer.toObject();
+      } else {
+        console.log('Customer not found for id:', id);
+        return null;
+      }
     } catch (error) {
       console.error('Error fetching customer:', error);
-      throw error;
+      throw new Error('Failed to fetch customer');
     }
   }
 
   static async updateCustomer(id: string, data: Partial<CustomerCreateRequest>): Promise<Customer | null> {
     try {
-      const customer = await CustomerModel.findByIdAndUpdate(id, data, { new: true });
-      return customer ? customer.toObject() : null;
+      const customerData = {
+        ...data,
+        mobilityAids: data.mobilityAids || []
+      };
+      const customer = await CustomerModel.findByIdAndUpdate(id, customerData, { new: true });
+      if (customer) {
+        console.log('Customer updated:', customer);
+        return customer.toObject();
+      } else {
+        console.log('Customer not found for update, id:', id);
+        return null;
+      }
     } catch (error) {
       console.error('Error updating customer:', error);
-      throw error;
+      throw new Error('Failed to update customer');
     }
   }
 
   static async deleteCustomer(id: string): Promise<boolean> {
     try {
       const result = await CustomerModel.findByIdAndDelete(id);
-      return !!result;
+      if (result) {
+        console.log('Customer deleted, id:', id);
+        return true;
+      } else {
+        console.log('Customer not found for deletion, id:', id);
+        return false;
+      }
     } catch (error) {
       console.error('Error deleting customer:', error);
-      throw error;
+      throw new Error('Failed to delete customer');
     }
   }
 
@@ -5286,10 +5604,11 @@ export class CustomerService {
           { email: { $regex: term, $options: 'i' } },
         ]
       }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
+      console.log(`Found ${customers.length} customers matching term: ${term}`);
       return customers.map(customer => customer.toObject());
     } catch (error) {
       console.error('Error searching customers:', error);
-      throw error;
+      throw new Error('Failed to search customers');
     }
   }
 }
@@ -5320,6 +5639,8 @@ const SettingsSchema = new mongoose.Schema({
   monthlyRatePerFt: { type: Number, required: true },
   installRatePerComponent: { type: Number, required: true },
   deliveryRatePerMile: { type: Number, required: true },
+  baseInstallFee: { type: Number, required: true },
+  baseDeliveryFee: { type: Number, required: true },
 });
 
 export interface ISettings extends Document {
@@ -5327,6 +5648,8 @@ export interface ISettings extends Document {
   monthlyRatePerFt: number;
   installRatePerComponent: number;
   deliveryRatePerMile: number;
+  baseInstallFee: number;
+  baseDeliveryFee: number;
 }
 
 export const Settings = mongoose.models.Settings || mongoose.model<ISettings>('Settings', SettingsSchema);
@@ -5457,7 +5780,7 @@ const CustomerSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true },
   installAddress: { type: String, required: true },
   mobilityAids: [{ type: String }],
-});
+}, { timestamps: true });
 
 export interface ICustomer extends Document {
   firstName: string;
@@ -5469,147 +5792,6 @@ export interface ICustomer extends Document {
 }
 
 export const Customer = mongoose.models.Customer || mongoose.model<ICustomer>('Customer', CustomerSchema);
-```
-
-# src/hooks/usePricingVariables.ts
-
-```ts
-import { useState, useEffect } from 'react';
-
-interface PricingVariables {
-  warehouseAddress: string;
-  monthlyRatePerFt: number;
-  installRatePerComponent: number;
-  deliveryRatePerMile: number;
-}
-
-const defaultPricingVariables: PricingVariables = {
-  warehouseAddress: '',
-  monthlyRatePerFt: 0,
-  installRatePerComponent: 0,
-  deliveryRatePerMile: 0,
-};
-
-export const usePricingVariables = () => {
-  const [pricingVariables, setPricingVariables] = useState<PricingVariables>(defaultPricingVariables);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const response = await fetch('/api/settings');
-        if (!response.ok) throw new Error('Failed to fetch settings');
-        const { data } = await response.json();
-        setPricingVariables(data || defaultPricingVariables);
-      } catch (error) {
-        console.error('Error fetching settings:', error);
-        setError('Failed to load settings. Please try again later.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchSettings();
-  }, []);
-
-  const updatePricingVariables = async (newVariables: PricingVariables) => {
-    try {
-      const response = await fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newVariables),
-      });
-      if (!response.ok) throw new Error('Failed to update settings');
-      const { data } = await response.json();
-      setPricingVariables(data);
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      throw error; // Re-throw the error to be handled in the component
-    }
-  };
-
-  return { pricingVariables, updatePricingVariables, isLoading, error };
-};
-```
-
-# src/hooks/useForm.ts
-
-```ts
-'use client';
-
-import { useState, ChangeEvent } from 'react';
-
-interface FormErrors {
-  [key: string]: string;
-}
-
-type ChangeEventOrCustomChange = ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] };
-
-export function useForm<T>(initialState: T, validate: (values: T) => FormErrors) {
-  const [values, setValues] = useState<T>(initialState);
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleChange = (e: ChangeEventOrCustomChange) => {
-    const { name, value } = 'target' in e ? e.target : e;
-    setValues(prevValues => ({ ...prevValues, [name]: value }));
-  };
-
-  const handleSubmit = async (onSubmit: (values: T) => Promise<void>) => {
-    setIsSubmitting(true);
-    const newErrors = validate(values);
-    setErrors(newErrors);
-
-    if (Object.keys(newErrors).length === 0) {
-      try {
-        await onSubmit(values);
-      } catch (error) {
-        console.error('Form submission error:', error);
-      }
-    }
-    setIsSubmitting(false);
-  };
-
-  return { values, errors, isSubmitting, handleChange, handleSubmit, setValues };
-}
-```
-
-# src/hooks/useDistanceCalculation.ts
-
-```ts
-import { useState, useEffect } from 'react';
-
-export const useDistanceCalculation = (origin: string, destination: string) => {
-  const [distance, setDistance] = useState<number | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!origin || !destination) return;
-
-    const calculateDistance = async () => {
-      try {
-        const response = await fetch(`/api/distance?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`);
-        const data = await response.json();
-        
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to calculate distance');
-        }
-        
-        setDistance(data.distance);
-        setError(null);
-      } catch (err) {
-        console.error('Error calculating distance:', err);
-        setError('Error calculating distance. Please try again.');
-        setDistance(null);
-      }
-    };
-
-    calculateDistance();
-  }, [origin, destination]);
-
-  return { distance, error };
-};
 ```
 
 # src/lib/utils.ts
@@ -5661,7 +5843,6 @@ export const rateLimit = (limit: number, interval: number) => {
 # src/lib/mongodb.ts
 
 ```ts
-import { MongoClient } from 'mongodb';
 import mongoose from 'mongoose';
 
 if (!process.env.MONGODB_URI) {
@@ -5669,32 +5850,8 @@ if (!process.env.MONGODB_URI) {
 }
 
 const uri = process.env.MONGODB_URI;
-const options: mongoose.ConnectOptions = {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-} as mongoose.ConnectOptions;
+const options: mongoose.ConnectOptions = {};
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
-
-// Use a module-level variable instead of a global
-let _mongoClientPromise: Promise<MongoClient> | undefined;
-
-if (process.env.NODE_ENV === 'development') {
-  if (!_mongoClientPromise) {
-    client = new MongoClient(uri);
-    _mongoClientPromise = client.connect();
-  }
-  clientPromise = _mongoClientPromise;
-} else {
-  client = new MongoClient(uri);
-  clientPromise = client.connect();
-}
-
-// Export the clientPromise
-export { clientPromise };
-
-// Cached connection for mongoose
 let cachedConnection: typeof mongoose | null = null;
 
 export async function dbConnect(): Promise<typeof mongoose> {
@@ -5715,13 +5872,7 @@ export async function dbConnect(): Promise<typeof mongoose> {
   }
 }
 
-// Create a named object for the default export
-const mongodbConnection = {
-  clientPromise,
-  dbConnect,
-};
-
-// Export the named object as default
+const mongodbConnection = { dbConnect };
 export default mongodbConnection;
 ```
 
@@ -5800,24 +5951,203 @@ export function createApiHandler<T>(handler: ApiHandler<T>) {
 }
 ```
 
-# src/config/cors.ts
+# src/hooks/useQuotes.ts
 
 ```ts
-export const allowedOrigins = [
-    'https://www.samedayramps.com',
-    'https://form.samedayramps.com',
-    'https://app.samedayramps.com',
-    'http://localhost:3000'  // Include this for local development
-  ];
+import { useState, useEffect } from 'react';
+import { Quote } from '@/types';
+
+export const useQuotes = () => {
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchQuotes = async () => {
+      try {
+        const response = await fetch('/api/quotes');
+        if (!response.ok) {
+          throw new Error('Failed to fetch quotes');
+        }
+        const data = await response.json();
+        setQuotes(data.data);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'An error occurred while fetching quotes');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchQuotes();
+  }, []);
+
+  return { quotes, isLoading, error };
+};
+```
+
+# src/hooks/usePricingVariables.ts
+
+```ts
+import { useState, useEffect } from 'react';
+import { Settings } from '@/types';
+
+const defaultPricingVariables: Settings = {
+  _id: '',
+  warehouseAddress: '',
+  monthlyRatePerFt: 0,
+  installRatePerComponent: 0,
+  deliveryRatePerMile: 0,
+  baseInstallFee: 0,
+  baseDeliveryFee: 0,
+};
+
+export const usePricingVariables = () => {
+  const [pricingVariables, setPricingVariables] = useState<Settings>(defaultPricingVariables);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to fetch settings');
+        const { data } = await response.json();
+        console.log('Fetched settings:', data);
+        if (data) {
+          setPricingVariables({
+            _id: data._id,
+            warehouseAddress: data.warehouseAddress || '',
+            monthlyRatePerFt: Number(data.monthlyRatePerFt) || 0,
+            installRatePerComponent: Number(data.installRatePerComponent) || 0,
+            deliveryRatePerMile: Number(data.deliveryRatePerMile) || 0,
+            baseInstallFee: Number(data.baseInstallFee) || 0,
+            baseDeliveryFee: Number(data.baseDeliveryFee) || 0,
+          });
+        } else {
+          setPricingVariables(defaultPricingVariables);
+        }
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+        setError('Failed to load settings. Please try again later.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchSettings();
+  }, []);
+
+  const updatePricingVariables = async (newVariables: Partial<Settings>) => {
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newVariables),
+      });
+      if (!response.ok) throw new Error('Failed to update settings');
+      const { data } = await response.json();
+      setPricingVariables(data);
+    } catch (error) {
+      console.error('Error updating settings:', error);
+      throw error;
+    }
+  };
+
+  return { pricingVariables, updatePricingVariables, isLoading, error };
+};
+```
+
+# src/hooks/useForm.ts
+
+```ts
+'use client';
+
+import { useState, ChangeEvent } from 'react';
+
+interface FormErrors {
+  [key: string]: string;
+}
+
+type ChangeEventOrCustomChange = ChangeEvent<HTMLInputElement | HTMLSelectElement> | { name: string; value: string | string[] };
+
+export function useForm<T>(initialState: T, validate: (values: T) => FormErrors) {
+  const [values, setValues] = useState<T>(initialState);
+  const [errors, setErrors] = useState<FormErrors>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleChange = (e: ChangeEventOrCustomChange) => {
+    const { name, value } = 'target' in e ? e.target : e;
+    setValues(prevValues => ({ ...prevValues, [name]: value }));
+  };
+
+  const handleSubmit = async (onSubmit: (values: T) => Promise<void>) => {
+    setIsSubmitting(true);
+    const newErrors = validate(values);
+    setErrors(newErrors);
+
+    if (Object.keys(newErrors).length === 0) {
+      try {
+        await onSubmit(values);
+      } catch (error) {
+        console.error('Form submission error:', error);
+      }
+    }
+    setIsSubmitting(false);
+  };
+
+  return { values, errors, isSubmitting, handleChange, handleSubmit, setValues };
+}
+```
+
+# src/hooks/useDistanceCalculation.ts
+
+```ts
+import { useState, useEffect } from 'react';
+import { api } from '@/utils/api';
+
+export const useDistanceCalculation = (origin: string, destination: string) => {
+  const [distance, setDistance] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const calculateDistance = async () => {
+      if (!origin || !destination) {
+        setDistance(null);
+        setError('Origin and destination are required');
+        return;
+      }
+
+      try {
+        const response = await api.get<{ distance: number }>(`/distance?origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`);
+        if (response.data && typeof response.data.distance === 'number') {
+          setDistance(response.data.distance);
+          setError(null); // Clear any previous errors
+        } else {
+          throw new Error('Invalid distance data received');
+        }
+      } catch (err) {
+        console.error('Error calculating distance:', err);
+        setError('Failed to calculate distance');
+        setDistance(null);
+      }
+    };
+
+    calculateDistance();
+  }, [origin, destination]);
+
+  return { distance, error };
+};
 ```
 
 # src/contexts/QuoteContext.tsx
 
 ```tsx
+// src/contexts/QuoteContext.tsx
+
 'use client';
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 import { Quote, ApiResponse } from '@/types';
 
 interface QuoteContextType {
@@ -5849,9 +6179,9 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get<Quote[]>('/quotes');
+      const response = await apiClient.get<Quote[]>('/quotes');
       if (response.data) {
-        setQuotes(Array.isArray(response.data) ? response.data : []);
+        setQuotes(response.data);
       } else if (response.error) {
         setError(response.error);
       }
@@ -5867,11 +6197,11 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [fetchQuotes]);
 
   const getQuote = async (id: string): Promise<ApiResponse<Quote>> => {
-    return await api.get<Quote>(`/quotes/${id}`);
+    return await apiClient.get<Quote>(`/quotes/${id}`);
   };
 
   const addQuote = async (quote: Omit<Quote, '_id'>): Promise<ApiResponse<Quote>> => {
-    const response = await api.post<Quote>('/quotes', quote);
+    const response = await apiClient.post<Quote>('/quotes', quote);
     if (response.data) {
       setQuotes(prevQuotes => [...prevQuotes, response.data!]);
     }
@@ -5879,7 +6209,7 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const updateQuote = async (id: string, updatedQuote: Partial<Quote>): Promise<ApiResponse<Quote>> => {
-    const response = await api.put<Quote>(`/quotes/${id}`, updatedQuote);
+    const response = await apiClient.put<Quote>(`/quotes/${id}`, updatedQuote);
     if (response.data) {
       setQuotes(prevQuotes => prevQuotes.map(q => q._id === id ? response.data! : q));
     }
@@ -5887,7 +6217,7 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const deleteQuote = async (id: string): Promise<ApiResponse<void>> => {
-    const response = await api.delete<void>(`/quotes/${id}`);
+    const response = await apiClient.delete<void>(`/quotes/${id}`);
     if (!response.error) {
       setQuotes(prevQuotes => prevQuotes.filter(q => q._id !== id));
     }
@@ -5900,6 +6230,17 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </QuoteContext.Provider>
   );
 };
+```
+
+# src/config/cors.ts
+
+```ts
+export const allowedOrigins = [
+    'https://www.samedayramps.com',
+    'https://form.samedayramps.com',
+    'https://app.samedayramps.com',
+    'http://localhost:3000'  // Include this for local development
+  ];
 ```
 
 # src/components/SessionWrapper.tsx
@@ -5920,7 +6261,7 @@ export default function SessionWrapper({ children }: { children: ReactNode }) {
 ```tsx
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { RampComponent } from '@/types';
 
 const componentTypes = [
@@ -5958,58 +6299,75 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({
   readOnly = false
 }) => {
   const [components, setComponents] = useState<RampComponent[]>(initialComponents);
-  const [totalLength, setTotalLength] = useState(0);
+  const [rampSectionLength, setRampSectionLength] = useState(0);
+  const [totalRampLength, setTotalRampLength] = useState(0);
+  const prevComponentsRef = useRef<RampComponent[]>([]);
 
-  const calculateTotalLength = useCallback(() => {
-    let length = 0;
+  const calculateLengths = useCallback(() => {
+    let sectionLength = 0;
+    let totalLength = 0;
     components.forEach(component => {
-      const match = component.name.match(/(\d+)ft/);
+      const match = component.name.match(/(\d+)(?:x(\d+))?\s*ft/);
       if (match) {
-        length += parseInt(match[1]) * component.quantity;
+        const length = parseInt(match[1]);
+        if (component.name.includes('landing')) {
+          totalLength += length * component.quantity;
+        } else {
+          sectionLength += length * component.quantity;
+          totalLength += length * component.quantity;
+        }
       }
     });
-    setTotalLength(length);
-    onConfigurationChange(components, length);
-  }, [components, onConfigurationChange]);
+    return { sectionLength, totalLength };
+  }, [components]);
 
   useEffect(() => {
-    calculateTotalLength();
-  }, [calculateTotalLength]);
+    const { sectionLength, totalLength } = calculateLengths();
+    setRampSectionLength(sectionLength);
+    setTotalRampLength(totalLength);
 
-  const handleComponentSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    if (JSON.stringify(components) !== JSON.stringify(prevComponentsRef.current)) {
+      onConfigurationChange(components, totalLength);
+      prevComponentsRef.current = [...components];
+    }
+  }, [components, calculateLengths, onConfigurationChange]);
+
+  const handleComponentSelect = useCallback((e: React.ChangeEvent<HTMLSelectElement>) => {
     const selectedComponent = e.target.value;
     if (selectedComponent !== 'Select a component') {
-      const existingComponent = components.find(comp => comp.name === selectedComponent);
-      if (existingComponent) {
-        updateQuantity(existingComponent.id, 1);
-      } else {
-        const newComponent: RampComponent = {
-          id: Date.now().toString(),
-          name: selectedComponent,
-          quantity: 1,
-          price: componentPrices[selectedComponent as keyof typeof componentPrices] || 0,
-        };
-        const updatedComponents = [...components, newComponent];
-        setComponents(updatedComponents);
-        onConfigurationChange(updatedComponents, totalLength);
-      }
-      e.target.value = 'Select a component'; // Reset dropdown to default option
+      setComponents(prevComponents => {
+        const existingComponent = prevComponents.find(comp => comp.name === selectedComponent);
+        if (existingComponent) {
+          return prevComponents.map(comp =>
+            comp.id === existingComponent.id
+              ? { ...comp, quantity: comp.quantity + 1 }
+              : comp
+          );
+        } else {
+          const newComponent: RampComponent = {
+            id: Date.now().toString(),
+            name: selectedComponent,
+            quantity: 1,
+            price: componentPrices[selectedComponent as keyof typeof componentPrices] || 0,
+          };
+          return [...prevComponents, newComponent];
+        }
+      });
+      e.target.value = 'Select a component';
     }
-  };
+  }, []);
 
-  const updateQuantity = (id: string, change: number) => {
-    const updatedComponents = components.map(component => 
-      component.id === id ? { ...component, quantity: Math.max(0, component.quantity + change) } : component
-    ).filter(component => component.quantity > 0);
-    setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents, totalLength);
-  };
+  const updateQuantity = useCallback((id: string, change: number) => {
+    setComponents(prevComponents => 
+      prevComponents.map(component => 
+        component.id === id ? { ...component, quantity: Math.max(0, component.quantity + change) } : component
+      ).filter(component => component.quantity > 0)
+    );
+  }, []);
 
-  const removeComponent = (id: string) => {
-    const updatedComponents = components.filter(component => component.id !== id);
-    setComponents(updatedComponents);
-    onConfigurationChange(updatedComponents, totalLength);
-  };
+  const removeComponent = useCallback((id: string) => {
+    setComponents(prevComponents => prevComponents.filter(component => component.id !== id));
+  }, []);
 
   return (
     <div className="bg-white shadow-md rounded-lg p-4 mb-4">
@@ -6067,6 +6425,11 @@ const RampConfigurationV2: React.FC<RampConfigurationV2Props> = ({
           </ul>
         </div>
       )}
+
+      <div className="mt-4">
+        <p><strong>Ramp Section Length:</strong> {rampSectionLength} ft</p>
+        <p><strong>Total Ramp Length:</strong> {totalRampLength} ft</p>
+      </div>
     </div>
   );
 };
@@ -6080,70 +6443,56 @@ export default RampConfigurationV2;
 'use client';
 
 import React from 'react';
+import { useQuotes } from '@/hooks/useQuotes';
+import { Quote, Customer } from '@/types';
 import Link from 'next/link';
-import { useQuoteContext } from '@/contexts/QuoteContext';
-import { Customer } from '@/types';
 
 const QuoteList: React.FC = () => {
-  const { quotes, loading, error } = useQuoteContext();
+  const { quotes, isLoading, error } = useQuotes();
 
-  const getCustomerName = (customer: string | Customer): string => {
+  const getCustomerName = (customer: Customer | string | null): string => {
     if (typeof customer === 'string') {
-      return 'N/A';
+      return 'Customer ID: ' + customer;
     }
-    return `${customer.firstName} ${customer.lastName}`;
+    if (customer && 'firstName' in customer && 'lastName' in customer) {
+      return `${customer.firstName} ${customer.lastName}`;
+    }
+    return 'Unknown Customer';
   };
 
-  if (loading) {
-    return <div>Loading quotes...</div>;
-  }
+  const formatDate = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString();
+  };
 
-  if (error) {
-    return <div>Error: {error}</div>;
-  }
+  if (isLoading) return <div>Loading quotes...</div>;
+  if (error) return <div>Error: {error}</div>;
 
   return (
-    <div className="flex flex-col">
-      <div className="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-        <div className="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-          <div className="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Customer
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Created At
-                  </th>
-                  <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {quotes.map((quote) => (
-                  <tr key={quote._id}>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      {getCustomerName(quote.customer)}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">{quote.status}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">{new Date(quote.createdAt).toLocaleDateString()}</td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <Link href={`/quotes/${quote._id}`} className="text-indigo-600 hover:text-indigo-900">
-                        View
-                      </Link>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+    <div className="overflow-x-auto">
+      <table className="min-w-full bg-white">
+        <thead className="bg-gray-100">
+          <tr>
+            <th className="py-2 px-4 border-b">Customer</th>
+            <th className="py-2 px-4 border-b">Created At</th>
+            <th className="py-2 px-4 border-b">Status</th>
+            <th className="py-2 px-4 border-b">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {quotes.map((quote: Quote) => (
+            <tr key={quote._id}>
+              <td className="py-2 px-4 border-b">{getCustomerName(quote.customer)}</td>
+              <td className="py-2 px-4 border-b">{formatDate(quote.createdAt)}</td>
+              <td className="py-2 px-4 border-b">{quote.status}</td>
+              <td className="py-2 px-4 border-b">
+                <Link href={`/quotes/${quote._id}`} className="text-blue-500 hover:underline">
+                  View
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };
@@ -6172,16 +6521,86 @@ const QuoteLayout: React.FC<QuoteLayoutProps> = ({ children }) => {
 export default QuoteLayout;
 ```
 
+# src/components/QuoteForm.tsx
+
+```tsx
+import React, { useState } from 'react';
+import RampConfigurationV2 from '@/components/RampConfiguration';
+import PricingComponent from '@/components/PricingComponent';
+import { Customer, RampComponent, QuoteData } from '@/types';
+
+interface QuoteFormProps {
+  customer: Customer;
+  onCreateQuote: (quoteData: QuoteData) => Promise<void>;
+}
+
+const QuoteForm: React.FC<QuoteFormProps> = ({ customer, onCreateQuote }) => {
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
+  const [totalLength, setTotalLength] = useState(0);
+  const [installPrice, setInstallPrice] = useState(0);
+  const [deliveryPrice, setDeliveryPrice] = useState(0);
+  const [monthlyRate, setMonthlyRate] = useState(0);
+
+  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
+    setRampComponents(components);
+    setTotalLength(length);
+  };
+
+  const handlePriceCalculated = (install: number, delivery: number, monthly: number) => {
+    setInstallPrice(install);
+    setDeliveryPrice(delivery);
+    setMonthlyRate(monthly);
+  };
+
+  const handleSubmit = async () => {
+    const quoteData: QuoteData = {
+      customer: customer._id,
+      installPrice,
+      deliveryPrice,
+      monthlyRate,
+      components: rampComponents,
+      status: 'DRAFT',
+      createdAt: new Date().toISOString(),
+      sentAt: null,
+      signedAt: null,
+      paymentStatus: 'PENDING',
+    };
+
+    await onCreateQuote(quoteData);
+  };
+
+  return (
+    <div>
+      <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
+      <PricingComponent 
+        rampComponents={rampComponents} 
+        totalLength={totalLength} 
+        installAddress={customer.installAddress || ''}
+        onPriceCalculated={handlePriceCalculated}
+      />
+      <button 
+        onClick={handleSubmit}
+        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4"
+      >
+        Create Quote
+      </button>
+    </div>
+  );
+};
+
+export default QuoteForm;
+```
+
 # src/components/QuoteDetails.tsx
 
 ```tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuoteContext } from '@/contexts/QuoteContext';
-import { Quote } from '@/types';
-import { api } from '@/utils/api';
+import { Quote, RampComponent } from '@/types';
+import { apiClient } from '@/utils/api';
 import CustomerDetails from '@/components/CustomerDetails';
 import RampConfigurationV2 from '@/components/RampConfiguration';
 import PricingComponent from '@/components/PricingComponent';
@@ -6200,34 +6619,41 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 
   useEffect(() => {
     const fetchQuote = async () => {
-      setIsLoading(true);
-      const response = await api.get<Quote>(`/quotes/${id}`);
-      if (response.data) {
-        setQuote(response.data);
-      } else if (response.error) {
-        setError(response.error);
+      try {
+        const response = await apiClient.get<Quote>(`/quotes/${id}`);
+        if (response.data) {
+          setQuote(response.data);
+        } else {
+          throw new Error('Quote not found');
+        }
+      } catch (error) {
+        console.error('Error fetching quote:', error);
+        setError('Failed to load quote. Please try again later.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchQuote();
   }, [id]);
 
-  const handleEdit = () => {
+  const handleEdit = useCallback(() => {
     setIsEditing(true);
-  };
+  }, []);
 
-  const handleSave = async (updatedQuote: Quote) => {
-    const response = await updateQuote(id, updatedQuote);
+  const handleSave = useCallback(async () => {
+    if (!quote) return;
+
+    const response = await updateQuote(id, quote);
     if (response.error) {
       setError(response.error);
-    } else {
-      setQuote(response.data!);
+    } else if (response.data) {
+      setQuote(response.data);
       setIsEditing(false);
     }
-  };
+  }, [quote, id, updateQuote]);
 
-  const handleDelete = async () => {
+  const handleDelete = useCallback(async () => {
     if (window.confirm('Are you sure you want to delete this quote?')) {
       const response = await deleteQuote(id);
       if (response.error) {
@@ -6236,6 +6662,35 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
         router.push('/quotes');
       }
     }
+  }, [id, deleteQuote, router]);
+
+  const handleRampConfigurationChange = useCallback((components: RampComponent[]) => {
+    setQuote(prevQuote => {
+      if (!prevQuote) return null;
+      return {
+        ...prevQuote,
+        components: components,
+      };
+    });
+  }, []);
+
+  const handlePriceCalculated = useCallback((installPrice: number, deliveryPrice: number, monthlyRate: number) => {
+    setQuote(prevQuote => {
+      if (!prevQuote) return null;
+      return {
+        ...prevQuote,
+        installPrice,
+        deliveryPrice,
+        monthlyRate,
+      };
+    });
+  }, []);
+
+  const calculateTotalLength = (components: RampComponent[]): number => {
+    return components.reduce((total, component) => {
+      const match = component.name.match(/(\d+)ft/);
+      return total + (match ? parseInt(match[1]) * component.quantity : 0);
+    }, 0);
   };
 
   if (isLoading) {
@@ -6265,7 +6720,7 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 
       <div className="mb-6">
         <RampConfigurationV2 
-          onConfigurationChange={() => {}}
+          onConfigurationChange={handleRampConfigurationChange}
           initialComponents={quote.components}
           readOnly={!isEditing}
         />
@@ -6274,12 +6729,9 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
       <div className="mb-6">
         <PricingComponent 
           rampComponents={quote.components}
-          totalLength={quote.components.reduce((total, component) => {
-            const match = component.name.match(/(\d+)ft/);
-            return total + (match ? parseInt(match[1]) * component.quantity : 0);
-          }, 0)}
+          totalLength={calculateTotalLength(quote.components)}
           installAddress={typeof quote.customer !== 'string' ? quote.customer.installAddress || '' : ''}
-          onPriceCalculated={() => {}}
+          onPriceCalculated={handlePriceCalculated}
           initialInstallPrice={quote.installPrice}
           initialDeliveryPrice={quote.deliveryPrice}
           initialMonthlyRate={quote.monthlyRate}
@@ -6297,7 +6749,7 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
               Cancel
             </button>
             <button 
-              onClick={() => handleSave(quote)}
+              onClick={handleSave}
               className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             >
               Save Changes
@@ -6436,6 +6888,36 @@ const PricingVariables: React.FC = () => {
           min="0"
         />
       </div>
+
+      <div>
+        <label htmlFor="baseInstallFee" className="block text-sm font-medium text-gray-700">
+          Base Install Fee ($)
+        </label>
+        <Input
+          type="number"
+          id="baseInstallFee"
+          name="baseInstallFee"
+          value={formData.baseInstallFee}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
+
+      <div>
+        <label htmlFor="baseDeliveryFee" className="block text-sm font-medium text-gray-700">
+          Base Delivery Fee ($)
+        </label>
+        <Input
+          type="number"
+          id="baseDeliveryFee"
+          name="baseDeliveryFee"
+          value={formData.baseDeliveryFee}
+          onChange={handleInputChange}
+          step="0.01"
+          min="0"
+        />
+      </div>
       
       {saveError && <div className="text-red-500">{saveError}</div>}
       
@@ -6454,7 +6936,7 @@ export default PricingVariables;
 ```tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { usePricingVariables } from '@/hooks/usePricingVariables';
 import { useDistanceCalculation } from '@/hooks/useDistanceCalculation';
 import { RampComponent } from '@/types';
@@ -6486,24 +6968,26 @@ const PricingComponent: React.FC<PricingComponentProps> = ({
   const [deliveryPrice, setDeliveryPrice] = useState(initialDeliveryPrice || 0);
   const [monthlyRate, setMonthlyRate] = useState(initialMonthlyRate || 0);
 
-  useEffect(() => {
-    if (isPricingLoading || distance === null) return;
+  const calculatePrices = useCallback(() => {
+    if (isPricingLoading || distance === null || !pricingVariables) return;
 
-    const calculatePrices = () => {
-      const install = rampComponents.reduce((total, component) => 
-        total + (component.quantity * pricingVariables.installRatePerComponent), 0);
-      const delivery = distance * pricingVariables.deliveryRatePerMile;
-      const monthly = totalLength * pricingVariables.monthlyRatePerFt;
+    const install = pricingVariables.baseInstallFee + rampComponents.reduce((total, component) => 
+      total + (component.quantity * (pricingVariables.installRatePerComponent || 0)), 0);
+    const delivery = pricingVariables.baseDeliveryFee + (distance || 0) * (pricingVariables.deliveryRatePerMile || 0);
+    const monthly = totalLength * (pricingVariables.monthlyRatePerFt || 0);
 
-      setInstallPrice(Number(install.toFixed(2)));
-      setDeliveryPrice(Number(delivery.toFixed(2)));
-      setMonthlyRate(Number(monthly.toFixed(2)));
+    setInstallPrice(Number(install.toFixed(2)));
+    setDeliveryPrice(Number(delivery.toFixed(2)));
+    setMonthlyRate(Number(monthly.toFixed(2)));
 
+    if (!readOnly) {
       onPriceCalculated(install, delivery, monthly);
-    };
+    }
+  }, [rampComponents, totalLength, distance, pricingVariables, isPricingLoading, onPriceCalculated, readOnly]);
 
+  useEffect(() => {
     calculatePrices();
-  }, [rampComponents, totalLength, distance, pricingVariables, isPricingLoading, onPriceCalculated]);
+  }, [calculatePrices]);
 
   if (isPricingLoading) {
     return <div>Loading pricing information...</div>;
@@ -6534,14 +7018,6 @@ const PricingComponent: React.FC<PricingComponentProps> = ({
         <p>Delivery Price: ${deliveryPrice.toFixed(2)}</p>
         <p>Monthly Rate: ${monthlyRate.toFixed(2)}</p>
       </div>
-      {!readOnly && (
-        <button 
-          onClick={() => onPriceCalculated(installPrice, deliveryPrice, monthlyRate)}
-          className="mt-4 bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-        >
-          Update Pricing
-        </button>
-      )}
     </div>
   );
 };
@@ -6663,8 +7139,6 @@ export default Footer;
 # src/components/ErrorBoundary.tsx
 
 ```tsx
-'use client';
-
 import React, { ErrorInfo, ReactNode } from 'react';
 
 interface ErrorBoundaryProps {
@@ -6681,9 +7155,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // We're not using the error parameter in this method
+  static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
   }
 
@@ -6781,12 +7253,52 @@ const EmbeddableRentalRequestForm: React.FC = () => {
 export default EmbeddableRentalRequestForm;
 ```
 
+# src/components/CustomerSelection.tsx
+
+```tsx
+import React from 'react';
+import CustomerSearch from '@/components/CustomerSearch';
+import CustomerDetails from '@/components/CustomerDetails';
+import { Customer } from '@/types';
+
+interface CustomerSelectionProps {
+  selectedCustomer: Customer | null;
+  onSelectCustomer: (customer: Customer) => void;
+  onCustomerUpdate: (updatedCustomer: Customer) => void;
+}
+
+const CustomerSelection: React.FC<CustomerSelectionProps> = ({
+  selectedCustomer,
+  onSelectCustomer,
+  onCustomerUpdate,
+}) => {
+  return (
+    <div>
+      <CustomerSearch onSelectCustomer={onSelectCustomer} />
+      {selectedCustomer && (
+        <div className="mt-6 mb-6">
+          <CustomerDetails 
+            customer={selectedCustomer} 
+            showActions={false}
+            onCustomerUpdate={onCustomerUpdate}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CustomerSelection;
+```
+
 # src/components/CustomerSearch.tsx
 
 ```tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchCustomers } from '@/store/customersSlice';
 import { Customer } from '@/types';
 
 interface CustomerSearchProps {
@@ -6794,37 +7306,39 @@ interface CustomerSearchProps {
 }
 
 const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => {
+  const dispatch = useAppDispatch();
+  const { customers, loading, error } = useAppSelector(state => state.customers);
   const [searchTerm, setSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  const handleSearch = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const term = e.target.value;
-    setSearchTerm(term);
+  useEffect(() => {
+    dispatch(fetchCustomers());
+  }, [dispatch]);
 
-    if (term.length < 2) {
+  useEffect(() => {
+    if (searchTerm.length >= 2) {
+      const filteredCustomers = customers.filter(customer =>
+        `${customer.firstName} ${customer.lastName}`.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        customer.email.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+      setSearchResults(filteredCustomers);
+    } else {
       setSearchResults([]);
-      return;
     }
+  }, [searchTerm, customers]);
 
-    setIsLoading(true);
-    setError(null);
-
-    try {
-      const response = await fetch(`/api/customers/search?term=${encodeURIComponent(term)}`);
-      if (!response.ok) {
-        throw new Error('Failed to fetch customers');
-      }
-      const data = await response.json();
-      setSearchResults(data);
-    } catch (err) {
-      setError('An error occurred while searching for customers');
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearchTerm(e.target.value);
   };
+
+  const handleSelectCustomer = (customer: Customer) => {
+    onSelectCustomer(customer);
+    setSearchTerm('');
+    setSearchResults([]);
+  };
+
+  if (loading) return <div>Loading customers...</div>;
+  if (error) return <div>Error: {error}</div>;
 
   return (
     <div className="mb-4">
@@ -6835,15 +7349,13 @@ const CustomerSearch: React.FC<CustomerSearchProps> = ({ onSelectCustomer }) => 
         onChange={handleSearch}
         className="w-full px-3 py-2 border rounded-md"
       />
-      {isLoading && <p>Loading...</p>}
-      {error && <p className="text-red-500">{error}</p>}
       {searchResults.length > 0 && (
         <ul className="mt-2 border rounded-md max-h-80 overflow-y-auto">
           {searchResults.map(customer => (
             <li 
               key={customer._id} 
               className="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-b-0"
-              onClick={() => onSelectCustomer(customer)}
+              onClick={() => handleSelectCustomer(customer)}
             >
               <div className="font-semibold">{customer.firstName} {customer.lastName}</div>
               <div className="text-sm text-gray-600">{customer.email}</div>
@@ -6872,37 +7384,34 @@ export default CustomerSearch;
 ```tsx
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import Link from 'next/link';
-import { api } from '@/utils/api';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { fetchCustomers } from '@/store/customersSlice';
 import { Customer } from '@/types';
 
 const CustomerList: React.FC = () => {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  const { customers, loading, error } = useAppSelector(state => state.customers);
 
   useEffect(() => {
-    const fetchCustomers = async () => {
-      const response = await api.get<Customer[]>('/customers');
-      if (response.data) {
-        setCustomers(Array.isArray(response.data) ? response.data : []);
-      } else if (response.error) {
-        setError(response.error);
-      }
-      setIsLoading(false);
-    };
+    dispatch(fetchCustomers());
+  }, [dispatch]);
 
-    fetchCustomers();
-  }, []);
+  useEffect(() => {
+    console.log('Customers state:', customers);
+  }, [customers]);
 
-  if (isLoading) return <div>Loading customers...</div>;
+  if (loading) return <div>Loading customers...</div>;
   if (error) return <div>Error: {error}</div>;
+
+  // Check if customers is an array and has items
+  const hasCustomers = Array.isArray(customers) && customers.length > 0;
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4">Customers</h2>
-      {customers.length === 0 ? (
+      {!hasCustomers ? (
         <p>No customers found.</p>
       ) : (
         <table className="min-w-full divide-y divide-gray-200">
@@ -6915,7 +7424,7 @@ const CustomerList: React.FC = () => {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {customers.map((customer) => (
+            {customers.map((customer: Customer) => (
               <tr key={customer._id}>
                 <td className="px-6 py-4 whitespace-nowrap">{customer.firstName} {customer.lastName}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{customer.email}</td>
@@ -6935,149 +7444,236 @@ const CustomerList: React.FC = () => {
 export default CustomerList;
 ```
 
-# src/components/CustomerDetails.tsx
+# src/components/CustomerForm.tsx
 
 ```tsx
-"use client"
-
 import React, { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Customer } from '@/types';
-import { api } from '@/utils/api';
-import { ActionButton } from '@/components/ui/ActionButton';
-import { Input } from '@/components/ui/Input';
-import { Button } from '@/components/ui/Button';
-import { AddressField } from '@/components/ui/AddressField';
+import { CustomerCreateRequest } from '@/types';
 
-interface CustomerDetailsProps {
-  customer: Customer;
-  showActions?: boolean;
-  onCustomerUpdate?: (updatedCustomer: Customer) => void;
+interface CustomerFormProps {
+  onSubmit: (customerData: CustomerCreateRequest) => Promise<void>;
 }
 
-const CustomerDetails: React.FC<CustomerDetailsProps> = ({ customer, showActions = false, onCustomerUpdate }) => {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedCustomer, setEditedCustomer] = useState<Customer>(customer);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+const CustomerForm: React.FC<CustomerFormProps> = ({ onSubmit }) => {
+  const [formData, setFormData] = useState<CustomerCreateRequest>({
+    firstName: '',
+    lastName: '',
+    email: '',
+    phoneNumber: '',
+    installAddress: '',
+    mobilityAids: [],
+  });
 
-  const handleEdit = () => setIsEditing(true);
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditedCustomer(customer);
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSaveEdit = async () => {
-    const response = await api.put<Customer>(`/customers/${customer._id}`, editedCustomer);
-    if (response.data) {
-      setIsEditing(false);
-      if (onCustomerUpdate) {
-        onCustomerUpdate(response.data);
-      }
-    } else if (response.error) {
-      setError(response.error);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this customer?')) {
-      const response = await api.delete<void>(`/customers/${customer._id}`);
-      if (!response.error) {
-        router.push('/customers');
-      } else {
-        setError(response.error);
-      }
-    }
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setEditedCustomer({
-      ...editedCustomer,
-      [e.target.name]: e.target.value,
-    });
-  };
-
-  const handleAddressChange = (value: string) => {
-    setEditedCustomer({
-      ...editedCustomer,
-      installAddress: value,
-    });
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await onSubmit(formData);
   };
 
   return (
-    <div className="bg-white shadow-md rounded-lg p-6">
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-      {isEditing ? (
-        <form onSubmit={(e) => { e.preventDefault(); handleSaveEdit(); }} className="space-y-4">
-          <div>
-            <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
-            <Input
-              id="firstName"
-              name="firstName"
-              value={editedCustomer.firstName}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div>
-            <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
-            <Input
-              id="lastName"
-              name="lastName"
-              value={editedCustomer.lastName}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-            <Input
-              id="email"
-              name="email"
-              value={editedCustomer.email}
-              onChange={handleInputChange}
-            />
-          </div>
-          <div>
-            <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">Phone Number</label>
-            <Input
-              id="phoneNumber"
-              name="phoneNumber"
-              value={editedCustomer.phoneNumber}
-              onChange={handleInputChange}
-            />
-          </div>
-          <AddressField
-            value={editedCustomer.installAddress || ''}
-            onChange={handleAddressChange}
-            label="Install Address"
-            placeholder="Enter customer's install address"
-          />
-          <div className="flex justify-between">
-            <Button type="button" onClick={handleCancelEdit} variant="secondary">
-              Cancel
-            </Button>
-            <Button type="submit">Save Changes</Button>
-          </div>
-        </form>
-      ) : (
-        <>
-          <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
-          <p><strong>Email:</strong> {customer.email}</p>
-          <p><strong>Phone:</strong> {customer.phoneNumber}</p>
-          <p><strong>Install Address:</strong> {customer.installAddress || 'Not provided'}</p>
-          <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
-          {showActions && (
-            <div className="mt-6 flex justify-between">
-              <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
-              <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
-            </div>
-          )}
-        </>
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <label htmlFor="firstName" className="block text-sm font-medium text-gray-700">First Name</label>
+        <input
+          type="text"
+          id="firstName"
+          name="firstName"
+          value={formData.firstName}
+          onChange={handleChange}
+          required
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+        />
+      </div>
+      <div>
+        <label htmlFor="lastName" className="block text-sm font-medium text-gray-700">Last Name</label>
+        <input
+          type="text"
+          id="lastName"
+          name="lastName"
+          value={formData.lastName}
+          onChange={handleChange}
+          required
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+        />
+      </div>
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
+        <input
+          type="email"
+          id="email"
+          name="email"
+          value={formData.email}
+          onChange={handleChange}
+          required
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+        />
+      </div>
+      <div>
+        <label htmlFor="phoneNumber" className="block text-sm font-medium text-gray-700">Phone Number</label>
+        <input
+          type="tel"
+          id="phoneNumber"
+          name="phoneNumber"
+          value={formData.phoneNumber}
+          onChange={handleChange}
+          required
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+        />
+      </div>
+      <div>
+        <label htmlFor="installAddress" className="block text-sm font-medium text-gray-700">Installation Address</label>
+        <input
+          type="text"
+          id="installAddress"
+          name="installAddress"
+          value={formData.installAddress}
+          onChange={handleChange}
+          required
+          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+        />
+      </div>
+      <button
+        type="submit"
+        className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+      >
+        Create Customer
+      </button>
+    </form>
+  );
+};
+
+export default CustomerForm;
+```
+
+# src/components/CustomerDetails.tsx
+
+```tsx
+import React from 'react';
+import { Customer } from '@/types';
+
+interface CustomerDetailsProps {
+  customer: Customer;
+  showActions: boolean;
+  onCustomerUpdate?: (updatedCustomer: Customer) => void;
+}
+
+const CustomerDetails: React.FC<CustomerDetailsProps> = ({ customer, showActions }) => {
+  return (
+    <div className="bg-white shadow-md rounded-lg p-6 mb-4">
+      <h2 className="text-xl font-semibold mb-4">{customer.firstName} {customer.lastName}</h2>
+      <p><strong>Email:</strong> {customer.email}</p>
+      <p><strong>Phone:</strong> {customer.phoneNumber}</p>
+      <p><strong>Installation Address:</strong> {customer.installAddress}</p>
+      <p><strong>Mobility Aids:</strong> {customer.mobilityAids?.join(', ') || 'None'}</p>
+      {showActions && (
+        <div className="mt-4">
+          {/* Add action buttons here if needed */}
+        </div>
       )}
     </div>
   );
 };
 
 export default CustomerDetails;
+```
+
+# src/components/CreateQuoteForm.tsx
+
+```tsx
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAppDispatch } from '@/store/hooks';
+import { createQuote } from '@/store/quotesSlice';
+import { Customer, QuoteCreateRequest, RampComponent } from '@/types';
+import CustomerSearch from './CustomerSearch';
+import CustomerDetails from './CustomerDetails';
+import RampConfigurationV2 from './RampConfiguration';
+import PricingComponent from './PricingComponent';
+
+const CreateQuoteForm: React.FC = () => {
+  const router = useRouter();
+  const dispatch = useAppDispatch();
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [rampComponents, setRampComponents] = useState<RampComponent[]>([]);
+  const [totalLength, setTotalLength] = useState(0);
+  const [quoteData, setQuoteData] = useState<Partial<QuoteCreateRequest>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  const handleCustomerSelect = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setQuoteData(prevData => ({ ...prevData, customer: customer._id }));
+  };
+
+  const handleRampConfigurationChange = (components: RampComponent[], length: number) => {
+    setRampComponents(components);
+    setTotalLength(length);
+    setQuoteData(prevData => ({ ...prevData, components }));
+  };
+
+  const handlePriceCalculated = (installPrice: number, deliveryPrice: number, monthlyRate: number) => {
+    setQuoteData(prevData => ({
+      ...prevData,
+      installPrice,
+      deliveryPrice,
+      monthlyRate
+    }));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCustomer) {
+      setError('Please select a customer');
+      return;
+    }
+
+    try {
+      const newQuote: QuoteCreateRequest = {
+        ...quoteData as QuoteCreateRequest,
+        status: 'DRAFT',
+      };
+      const resultAction = await dispatch(createQuote(newQuote));
+      if (createQuote.fulfilled.match(resultAction)) {
+        router.push('/quotes');
+      } else {
+        throw new Error('Failed to create quote');
+      }
+    } catch (error) {
+      setError('Failed to create quote. Please try again.');
+      console.error('Error creating quote:', error);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-6">
+      <CustomerSearch onSelectCustomer={handleCustomerSelect} />
+      {selectedCustomer && (
+        <CustomerDetails 
+          customer={selectedCustomer} 
+          showActions={false}
+        />
+      )}
+      <RampConfigurationV2 onConfigurationChange={handleRampConfigurationChange} />
+      {selectedCustomer && (
+        <PricingComponent
+          rampComponents={rampComponents}
+          totalLength={totalLength}
+          installAddress={selectedCustomer.installAddress || ''}
+          onPriceCalculated={handlePriceCalculated}
+        />
+      )}
+      <button type="submit" className="bg-blue-500 text-white px-4 py-2 rounded">
+        Create Quote
+      </button>
+      {error && <div className="text-red-500">{error}</div>}
+    </form>
+  );
+};
+
+export default CreateQuoteForm;
 ```
 
 # src/components/CreateQuoteButton.tsx
@@ -7088,12 +7684,19 @@ export default CustomerDetails;
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/Button';
+import { useAppSelector } from '@/store/hooks';
 
 const CreateQuoteButton: React.FC = () => {
   const router = useRouter();
+  const { customers } = useAppSelector(state => state.customers);
 
   const handleClick = () => {
-    router.push('/quotes/new');
+    if (customers.length === 0) {
+      alert('Please add a customer before creating a quote.');
+      router.push('/customers/new');
+    } else {
+      router.push('/quotes/new');
+    }
   };
 
   return (
@@ -7172,12 +7775,13 @@ export default function Home() {
 # src/app/layout.tsx
 
 ```tsx
+// src/app/layout.tsx
 'use client';
 
 import React from 'react';
 import { SessionProvider } from "next-auth/react";
 import { Provider } from 'react-redux';
-import { store } from '@/store';
+import { store } from '../store';  // Updated import path
 import Header from '@/components/Header';
 import '@/styles/globals.css';
 import AuthWrapper from '@/components/AuthWrapper';
@@ -7566,6 +8170,26 @@ export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, vari
     {label}
   </Button>
 );
+```
+
+# src/app/settings/page.tsx
+
+```tsx
+'use client';
+
+import React from 'react';
+import PricingVariables from '@/components/PricingVariables';
+
+const SettingsPage: React.FC = () => {
+  return (
+    <div className="max-w-4xl mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+      <PricingVariables />
+    </div>
+  );
+};
+
+export default SettingsPage;
 ```
 
 # src/components/RentalRequestForm/RentalRequestForm.tsx
@@ -8110,26 +8734,6 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
-# src/app/settings/page.tsx
-
-```tsx
-'use client';
-
-import React from 'react';
-import PricingVariables from '@/components/PricingVariables';
-
-const SettingsPage: React.FC = () => {
-  return (
-    <div className="max-w-4xl mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
-      <PricingVariables />
-    </div>
-  );
-};
-
-export default SettingsPage;
-```
-
 # src/app/quotes/page.tsx
 
 ```tsx
@@ -8158,12 +8762,14 @@ export default function Quotes() {
 # src/app/rental-requests/page.tsx
 
 ```tsx
+// src/app/rental-requests/page.tsx
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 import { RentalRequest } from '@/types';
 
 const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
@@ -8188,11 +8794,12 @@ const RentalRequestsPage = () => {
   useEffect(() => {
     const fetchRentalRequests = async () => {
       try {
-        const response = await api.get<RentalRequest[]>('/rental-requests');
-        if (response.data) {
-          setRentalRequests(Array.isArray(response.data) ? response.data : []);
-        } else if (response.error) {
-          setError(response.error);
+        setIsLoading(true);
+        const response = await apiClient.get<{ data: RentalRequest[] }>('/rental-requests');
+        if (response.data && Array.isArray(response.data.data)) {
+          setRentalRequests(response.data.data);
+        } else {
+          throw new Error('Invalid data format received from server');
         }
       } catch (err) {
         setError('Failed to load rental requests. Please try again later.');
@@ -8205,6 +8812,9 @@ const RentalRequestsPage = () => {
     fetchRentalRequests();
   }, []);
 
+  if (isLoading) return <div>Loading rental requests...</div>;
+  if (error) return <div className="text-red-500">{error}</div>;
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
       <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
@@ -8213,11 +8823,7 @@ const RentalRequestsPage = () => {
           New Rental Request
         </Link>
       </div>
-      {isLoading ? (
-        <p>Loading rental requests...</p>
-      ) : error ? (
-        <p className="text-red-500">{error}</p>
-      ) : rentalRequests.length === 0 ? (
+      {rentalRequests.length === 0 ? (
         <p>No rental requests found.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -8232,239 +8838,6 @@ const RentalRequestsPage = () => {
 
 export default RentalRequestsPage;
 ```
-
-# src/app/store/settingsSlice.ts
-
-```ts
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { Settings, SettingsUpdateRequest } from '@/types';
-import { api } from '@/utils/api';
-
-interface SettingsState {
-  settings: Settings | null;
-  loading: boolean;
-  error: string | null;
-}
-
-const initialState: SettingsState = {
-  settings: null,
-  loading: false,
-  error: null,
-};
-
-export const fetchSettings = createAsyncThunk<Settings, void, { rejectValue: string }>(
-  'settings/fetchSettings',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await api.get<Settings>('/settings');
-      return response.data;
-    } catch (error) {
-      return rejectWithValue('Failed to fetch settings');
-    }
-  }
-);
-
-export const updateSettings = createAsyncThunk<Settings, SettingsUpdateRequest, { rejectValue: string }>(
-  'settings/updateSettings',
-  async (settingsData, { rejectWithValue }) => {
-    try {
-      const response = await api.post<Settings>('/settings', settingsData);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue('Failed to update settings');
-    }
-  }
-);
-
-const settingsSlice = createSlice({
-  name: 'settings',
-  initialState,
-  reducers: {},
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchSettings.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchSettings.fulfilled, (state, action: PayloadAction<Settings>) => {
-        state.settings = action.payload;
-        state.loading = false;
-      })
-      .addCase(fetchSettings.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload ?? 'Failed to fetch settings';
-      })
-      .addCase(updateSettings.fulfilled, (state, action: PayloadAction<Settings>) => {
-        state.settings = action.payload;
-      });
-  },
-});
-
-export default settingsSlice.reducer;
-```
-
-# src/app/store/quotesSlice.ts
-
-```ts
-import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { Quote, QuoteCreateRequest } from '@/types';
-import { api } from '@/utils/api';
-
-interface QuotesState {
-  quotes: Quote[];
-  loading: boolean;
-  error: string | null;
-}
-
-const initialState: QuotesState = {
-  quotes: [],
-  loading: false,
-  error: null,
-};
-
-export const fetchQuotes = createAsyncThunk<Quote[], void, { rejectValue: string }>(
-  'quotes/fetchQuotes',
-  async (_, { rejectWithValue }) => {
-    try {
-      const response = await api.get<Quote[]>('/quotes');
-      return response.data ?? [];
-    } catch (error) {
-      return rejectWithValue('Failed to fetch quotes');
-    }
-  }
-);
-
-export const createQuote = createAsyncThunk<Quote, QuoteCreateRequest, { rejectValue: string }>(
-  'quotes/createQuote',
-  async (quoteData, { rejectWithValue }) => {
-    try {
-      const response = await api.post<Quote>('/quotes', quoteData);
-      return response.data;
-    } catch (error) {
-      return rejectWithValue('Failed to create quote');
-    }
-  }
-);
-
-const quotesSlice = createSlice({
-  name: 'quotes',
-  initialState,
-  reducers: {},
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchQuotes.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchQuotes.fulfilled, (state, action: PayloadAction<Quote[]>) => {
-        state.quotes = action.payload;
-        state.loading = false;
-      })
-      .addCase(fetchQuotes.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.payload ?? 'Failed to fetch quotes';
-      })
-      .addCase(createQuote.fulfilled, (state, action: PayloadAction<Quote>) => {
-        state.quotes.push(action.payload);
-      });
-  },
-});
-
-export default quotesSlice.reducer;
-```
-
-# src/app/store/index.ts
-
-```ts
-import { configureStore } from '@reduxjs/toolkit';
-import quotesReducer from './quotesSlice';
-import customersReducer from './customersSlice';
-import settingsReducer from './settingsSlice';
-
-export const store = configureStore({
-  reducer: {
-    quotes: quotesReducer,
-    customers: customersReducer,
-    settings: settingsReducer,
-  },
-});
-
-export type RootState = ReturnType<typeof store.getState>;
-export type AppDispatch = typeof store.dispatch;
-```
-
-# src/app/store/hooks.ts
-
-```ts
-import { TypedUseSelectorHook, useDispatch, useSelector } from 'react-redux';
-import type { RootState, AppDispatch } from './index';
-
-export const useAppDispatch = () => useDispatch<AppDispatch>();
-export const useAppSelector: TypedUseSelectorHook<RootState> = useSelector;
-```
-
-# src/app/store/customersSlice.ts
-
-```ts
-import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
-import { Customer, CustomerCreateRequest } from '@/types';
-import { api } from '@/utils/api';
-
-interface CustomersState {
-  customers: Customer[];
-  loading: boolean;
-  error: string | null;
-}
-
-const initialState: CustomersState = {
-  customers: [],
-  loading: false,
-  error: null,
-};
-
-export const fetchCustomers = createAsyncThunk('customers/fetchCustomers', async () => {
-  const response = await api.get<Customer[]>('/customers');
-  return response.data;
-});
-
-export const createCustomer = createAsyncThunk('customers/createCustomer', async (customerData: CustomerCreateRequest) => {
-  const response = await api.post<Customer>('/customers', customerData);
-  return response.data;
-});
-
-const customersSlice = createSlice({
-  name: 'customers',
-  initialState,
-  reducers: {},
-  extraReducers: (builder) => {
-    builder
-      .addCase(fetchCustomers.pending, (state) => {
-        state.loading = true;
-      })
-      .addCase(fetchCustomers.fulfilled, (state, action) => {
-        state.customers = action.payload ?? [];
-        state.loading = false;
-      })
-      .addCase(fetchCustomers.rejected, (state, action) => {
-        state.loading = false;
-        state.error = action.error.message || 'Failed to fetch customers';
-      })
-      .addCase(createCustomer.fulfilled, (state, action) => {
-        if (action.payload) {
-          state.customers.push(action.payload);
-        }
-      });
-  },
-});
-
-export default customersSlice.reducer;
-```
-
-# src/app/fonts/GeistVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
 
 # src/app/login/page.tsx
 
@@ -8542,6 +8915,14 @@ export default function LoginPage() {
   );
 }
 ```
+
+# src/app/fonts/GeistVF.woff
+
+This is a binary file of the type: Binary
+
+# src/app/fonts/GeistMonoVF.woff
+
+This is a binary file of the type: Binary
 
 # src/app/customers/page.tsx
 
@@ -8646,7 +9027,7 @@ const NewQuotePage: React.FC = () => {
           <CustomerDetails 
             customer={selectedCustomer} 
             showActions={false}
-            onCustomerUpdate={(updatedCustomer) => setSelectedCustomer(updatedCustomer)}
+            onCustomerUpdate={(updatedCustomer: Customer) => setSelectedCustomer(updatedCustomer)}
           />
         </div>
       )}
@@ -8693,6 +9074,114 @@ export default function QuotePage({ params }: { params: { id: string } }) {
 }
 ```
 
+# src/app/rental-requests/[id]/page.tsx
+
+```tsx
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ActionButton } from '@/components/ui/ActionButton';
+import { IRentalRequest } from '@/models';
+import { apiClient } from '@/utils/api';
+import { Customer } from '@/types';
+
+export default function RentalRequestDetails({ params }: { params: { id: string } }) {
+  const [request, setRequest] = useState<IRentalRequest | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const fetchRentalRequest = async () => {
+      try {
+        const response = await fetch(`/api/rental-requests/${params.id}`);
+        if (!response.ok) {
+          throw new Error('Failed to fetch rental request');
+        }
+        const data = await response.json();
+        setRequest(data.data);
+      } catch (err) {
+        setError('Failed to load rental request. Please try again later.');
+        console.error('Error fetching rental request:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRentalRequest();
+  }, [params.id]);
+
+  const handleCreateCustomer = async () => {
+    if (!request) return;
+
+    try {
+      const customerData = {
+        firstName: request.firstName,
+        lastName: request.lastName,
+        email: request.email,
+        phoneNumber: request.phone,
+        installAddress: request.installAddress,
+        mobilityAids: request.mobilityAids || [],
+      };
+
+      const response = await apiClient.post<Customer>('/customers', customerData);
+      
+      if (response.data && '_id' in response.data) {
+        router.push(`/customers/${response.data._id}`);
+      } else {
+        throw new Error('Customer ID not returned from server');
+      }
+    } catch (err) {
+      console.error('Error creating customer:', err);
+      alert('Failed to create customer. Please try again.');
+    }
+  };
+
+  const handleDelete = async () => {
+    if (confirm('Are you sure you want to delete this rental request?')) {
+      try {
+        const response = await fetch(`/api/rental-requests/${params.id}`, {
+          method: 'DELETE',
+        });
+        if (!response.ok) {
+          throw new Error('Failed to delete rental request');
+        }
+        router.push('/rental-requests');
+      } catch (err) {
+        console.error('Error deleting rental request:', err);
+        alert('Failed to delete rental request. Please try again.');
+      }
+    }
+  };
+
+  if (isLoading) return <p>Loading...</p>;
+  if (error) return <p className="text-red-500">{error}</p>;
+  if (!request) return <p>Rental request not found.</p>;
+
+  return (
+    <div className="max-w-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <h1 className="text-3xl font-bold mb-6">Rental Request Details</h1>
+      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">{request.firstName} {request.lastName}</h2>
+        <p><strong>Email:</strong> {request.email}</p>
+        <p><strong>Phone:</strong> {request.phone}</p>
+        <p><strong>Installation Timeframe:</strong> {request.installationTimeframe}</p>
+        <p><strong>Installation Address:</strong> {request.installAddress}</p>
+        <p><strong>Ramp Length:</strong> {request.knowRampLength === 'yes' ? `${request.estimatedRampLength} feet` : 'Unknown'}</p>
+        <p><strong>Rental Duration:</strong> {request.knowRentalDuration === 'yes' ? `${request.estimatedRentalDuration} days` : 'Unknown'}</p>
+        <p><strong>Mobility Aids:</strong> {request.mobilityAids && request.mobilityAids.length > 0 ? request.mobilityAids.join(', ') : 'None specified'}</p>
+        <p><strong>Submitted:</strong> {request.createdAt ? new Date(request.createdAt).toLocaleString() : 'Unknown'}</p>
+      </div>
+      <div className="flex justify-between mt-6">
+        <ActionButton onClick={handleCreateCustomer} label="Create Customer" variant="default" />
+        <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
+      </div>
+    </div>
+  );
+}
+```
+
 # src/app/rental-requests/new/page.tsx
 
 ```tsx
@@ -8735,76 +9224,267 @@ export default function NewRentalRequest() {
 }
 ```
 
-# src/app/rental-requests/[id]/page.tsx
+# src/app/api/settings/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { SettingsService } from '@/services/settingsService';
+import { Settings, ApiResponse } from '@/types';
+import { NextRequest } from 'next/server';
+
+export const GET = createApiHandler<Settings>(async (): Promise<ApiResponse<Settings>> => {
+  const settings = await SettingsService.getSettings();
+  console.log('API - Fetched settings:', settings);
+  return settings ? { data: settings } : { error: 'Settings not found' };
+});
+
+export const POST = createApiHandler<Settings>(async (request: NextRequest): Promise<ApiResponse<Settings>> => {
+  const data = await request.json();
+  const settings = await SettingsService.updateSettings(data);
+  return { data: settings };
+});
+```
+
+# src/app/api/send-quote/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { QuoteService } from '@/services/quoteService';
+
+export const POST = createApiHandler<{ message: string }>(async (request) => {
+  const { quoteId } = await request.json();
+  const result = await QuoteService.sendQuote(quoteId);
+  return { data: result };
+});
+```
+
+# src/app/api/rental-requests/route.ts
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { RentalRequest } from '@/models';
+
+const allowedOrigins = ['https://form.samedayramps.com', 'https://samedayramps.com'];
+
+function setHeaders(response: NextResponse, origin: string) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
+}
+
+export async function OPTIONS(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  if (allowedOrigins.includes(origin)) {
+    const response = new NextResponse(null, { status: 204 });
+    setHeaders(response, origin);
+    return response;
+  }
+  return new NextResponse(null, { status: 204 });
+}
+
+export async function POST(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  
+  try {
+    const body = await request.json();
+    console.log('Received body:', body);
+
+    // Create a new rental request without validation
+    const newRentalRequest = await RentalRequest.create(body);
+    
+    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
+export async function GET(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+
+  try {
+    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+    
+    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  } catch (error) {
+    console.error('Error in GET /api/rental-requests:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
+    
+    if (allowedOrigins.includes(origin)) {
+      setHeaders(response, origin);
+    }
+    
+    return response;
+  }
+}
+```
+
+# src/app/api/register/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { clientPromise } from '@/lib/mongodb';
+import bcrypt from 'bcryptjs';
+
+export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
+  const { username, email, password } = await request.json();
+
+  if (!username || !email || !password) {
+    throw new Error('Missing required fields');
+  }
+
+  const client = await clientPromise;
+  const db = client.db();
+
+  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
+  if (existingUser) {
+    throw new Error('Username or email already exists');
+  }
+
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  const result = await db.collection('users').insertOne({
+    username,
+    email,
+    password: hashedPassword,
+  });
+
+  return { 
+    data: { 
+      message: 'User registered successfully', 
+      userId: result.insertedId.toString() 
+    } 
+  };
+});
+```
+
+# src/app/api/distance/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { Client } from '@googlemaps/google-maps-services-js';
+
+const client = new Client({});
+
+export const GET = createApiHandler<{ distance: number }>(async (request) => {
+  const { searchParams } = new URL(request.url);
+  const origin = searchParams.get('origin');
+  const destination = searchParams.get('destination');
+
+  if (!origin || !destination) {
+    throw new Error('Origin and destination are required');
+  }
+
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!apiKey) {
+    throw new Error('GOOGLE_MAPS_API_KEY is not set');
+  }
+
+  const response = await client.distancematrix({
+    params: {
+      origins: [origin],
+      destinations: [destination],
+      key: apiKey,
+    },
+  });
+
+  if (response.data.rows[0].elements[0].status !== 'OK') {
+    throw new Error('Unable to calculate distance');
+  }
+
+  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
+  return { data: { distance } };
+});
+```
+
+# src/app/api/customers/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { CustomerService } from '@/services/customerService';
+import { Customer, CustomerCreateRequest } from '@/types';
+
+export const POST = createApiHandler<Customer>(async (request) => {
+  const data: CustomerCreateRequest = await request.json();
+  const customer = await CustomerService.createCustomerFromRentalRequest(data);
+  return { data: customer };
+});
+
+export const GET = createApiHandler<Customer[]>(async () => {
+  try {
+    const customers = await CustomerService.getAllCustomers();
+    return { data: customers };
+  } catch (error) {
+    console.error('Error fetching customers:', error);
+    return { error: 'Failed to fetch customers' };
+  }
+});
+```
+
+# src/app/api/quotes/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { QuoteService } from '@/services/quoteService';
+import { Quote, QuoteCreateRequest } from '@/types';
+
+export const GET = createApiHandler<Quote[]>(async () => {
+  const quotes = await QuoteService.getAllQuotes();
+  return { data: quotes };
+});
+
+export const POST = createApiHandler<Quote>(async (request) => {
+  const data: QuoteCreateRequest = await request.json();
+  
+  if (!data.customer) {
+    throw new Error('Customer is required');
+  }
+
+  const quote = await QuoteService.createQuote(data);
+  return { data: quote };
+});
+```
+
+# src/app/customers/new/page.tsx
 
 ```tsx
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
-import { ActionButton } from '@/components/ui/ActionButton';
-import { IRentalRequest } from '@/models';
+import { CustomerCreateRequest, Customer } from '@/types';
+import CustomerForm from '@/components/CustomerForm';
 
-export default function RentalRequestDetails({ params }: { params: { id: string } }) {
-  const [request, setRequest] = useState<IRentalRequest | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+const NewCustomerPage: React.FC = () => {
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchRentalRequest = async () => {
-      try {
-        const response = await fetch(`/api/rental-requests/${params.id}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch rental request');
-        }
-        const data = await response.json();
-        setRequest(data.data);
-      } catch (err) {
-        setError('Failed to load rental request. Please try again later.');
-        console.error('Error fetching rental request:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchRentalRequest();
-  }, [params.id]);
-
-  const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this rental request?')) {
-      try {
-        const response = await fetch(`/api/rental-requests/${params.id}`, {
-          method: 'DELETE',
-        });
-        if (!response.ok) {
-          throw new Error('Failed to delete rental request');
-        }
-        router.push('/rental-requests');
-      } catch (err) {
-        console.error('Error deleting rental request:', err);
-        alert('Failed to delete rental request. Please try again.');
-      }
-    }
-  };
-
-  const handleCreateCustomer = async () => {
-    if (!request) return;
-
+  const handleCreateCustomer = async (customerData: CustomerCreateRequest) => {
     try {
       const response = await fetch('/api/customers', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName: request.firstName,
-          lastName: request.lastName,
-          email: request.email,
-          phoneNumber: request.phone,
-          installAddress: request.installAddress,
-          mobilityAids: request.mobilityAids || [],
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(customerData),
       });
 
       if (!response.ok) {
@@ -8813,42 +9493,28 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
 
       const result = await response.json();
       console.log('Customer creation response:', result);
-      if (result.data && result.data.id) {
-        router.push(`/customers/${result.data.id}`);
-      } else {
+
+      if (!result.data || !result.data._id) {
         throw new Error('Customer ID not returned from server');
       }
-    } catch (err) {
-      console.error('Error creating customer:', err);
+
+      const createdCustomer = result.data as Customer;
+      router.push(`/customers/${createdCustomer._id}`);
+    } catch (error) {
+      console.error('Error creating customer:', error);
       alert('Failed to create customer. Please try again.');
     }
   };
 
-  if (isLoading) return <p>Loading...</p>;
-  if (error) return <p className="text-red-500">{error}</p>;
-  if (!request) return <p>Rental request not found.</p>;
-
   return (
-    <div className="max-w-2xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Rental Request Details</h1>
-      <div className="bg-white shadow-md rounded-lg p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">{request.firstName} {request.lastName}</h2>
-        <p><strong>Email:</strong> {request.email}</p>
-        <p><strong>Phone:</strong> {request.phone}</p>
-        <p><strong>Installation Timeframe:</strong> {request.installationTimeframe}</p>
-        <p><strong>Installation Address:</strong> {request.installAddress}</p>
-        <p><strong>Ramp Length:</strong> {request.knowRampLength === 'yes' ? `${request.estimatedRampLength} feet` : 'Unknown'}</p>
-        <p><strong>Rental Duration:</strong> {request.knowRentalDuration === 'yes' ? `${request.estimatedRentalDuration} days` : 'Unknown'}</p>
-        <p><strong>Mobility Aids:</strong> {request.mobilityAids && request.mobilityAids.length > 0 ? request.mobilityAids.join(', ') : 'None specified'}</p>
-        <p><strong>Submitted:</strong> {request.createdAt ? new Date(request.createdAt).toLocaleString() : 'Unknown'}</p>
-      </div>
-      <div className="flex justify-between mt-6">
-        <ActionButton onClick={handleCreateCustomer} label="Create Customer" variant="default" />
-        <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
-      </div>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-2xl font-bold mb-4">Create New Customer</h1>
+      <CustomerForm onSubmit={handleCreateCustomer} />
     </div>
   );
-}
+};
+
+export default NewCustomerPage;
 ```
 
 # src/app/customers/[id]/page.tsx
@@ -9025,7 +9691,9 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
             <p><strong>Email:</strong> {customer.email}</p>
             <p><strong>Phone:</strong> {customer.phoneNumber}</p>
             <p><strong>Installation Address:</strong> {customer.installAddress}</p>
-            <p><strong>Mobility Aids:</strong> {customer.mobilityAids.join(', ')}</p>
+            <p>
+              <strong>Mobility Aids:</strong> {customer.mobilityAids?.join(', ') || 'None'}
+            </p>
             <div className="mt-6 flex justify-between">
               <ActionButton onClick={handleEdit} label="Edit" variant="secondary" />
               <ActionButton onClick={handleDelete} label="Delete" variant="destructive" />
@@ -9036,242 +9704,6 @@ export default function CustomerDetails({ params }: { params: { id: string } }) 
     </div>
   );
 }
-```
-
-# src/app/api/settings/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { SettingsService } from '@/services/settingsService';
-import { Settings, ApiResponse } from '@/types';
-import { NextRequest } from 'next/server';
-
-export const GET = createApiHandler<Settings>(async (): Promise<ApiResponse<Settings>> => {
-  const settings = await SettingsService.getSettings();
-  return settings ? { data: settings } : { error: 'Settings not found' };
-});
-
-export const POST = createApiHandler<Settings>(async (request: NextRequest): Promise<ApiResponse<Settings>> => {
-  const data = await request.json();
-  const settings = await SettingsService.updateSettings(data);
-  return { data: settings };
-});
-```
-
-# src/app/api/send-quote/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { QuoteService } from '@/services/quoteService';
-
-export const POST = createApiHandler<{ message: string }>(async (request) => {
-  const { quoteId } = await request.json();
-  const result = await QuoteService.sendQuote(quoteId);
-  return { data: result };
-});
-```
-
-# src/app/api/rental-requests/route.ts
-
-```ts
-import { NextRequest, NextResponse } from 'next/server';
-import { RentalRequest } from '@/models';
-
-const allowedOrigins = ['https://form.samedayramps.com', 'https://samedayramps.com'];
-
-function setHeaders(response: NextResponse, origin: string) {
-  response.headers.set('Access-Control-Allow-Origin', origin);
-  response.headers.set('Access-Control-Allow-Credentials', 'true');
-  response.headers.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, X-Requested-With');
-}
-
-export async function OPTIONS(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-  
-  if (allowedOrigins.includes(origin)) {
-    const response = new NextResponse(null, { status: 204 });
-    setHeaders(response, origin);
-    return response;
-  }
-  return new NextResponse(null, { status: 204 });
-}
-
-export async function POST(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-  
-  try {
-    const body = await request.json();
-    console.log('Received body:', body);
-
-    // Create a new rental request without validation
-    const newRentalRequest = await RentalRequest.create(body);
-    
-    const response = NextResponse.json({ data: newRentalRequest.toObject() }, { status: 201 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('Error in POST /api/rental-requests:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  }
-}
-export async function GET(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    
-    const response = NextResponse.json({ data: rentalRequests.map(request => request.toObject()) }, { status: 200 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  } catch (error) {
-    console.error('Error in GET /api/rental-requests:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response = NextResponse.json({ error: errorMessage }, { status: 500 });
-    
-    if (allowedOrigins.includes(origin)) {
-      setHeaders(response, origin);
-    }
-    
-    return response;
-  }
-}
-```
-
-# src/app/api/register/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { clientPromise } from '@/lib/mongodb';
-import bcrypt from 'bcryptjs';
-
-export const POST = createApiHandler<{ message: string; userId: string }>(async (request) => {
-  const { username, email, password } = await request.json();
-
-  if (!username || !email || !password) {
-    throw new Error('Missing required fields');
-  }
-
-  const client = await clientPromise;
-  const db = client.db();
-
-  const existingUser = await db.collection('users').findOne({ $or: [{ username }, { email }] });
-  if (existingUser) {
-    throw new Error('Username or email already exists');
-  }
-
-  const hashedPassword = await bcrypt.hash(password, 10);
-
-  const result = await db.collection('users').insertOne({
-    username,
-    email,
-    password: hashedPassword,
-  });
-
-  return { 
-    data: { 
-      message: 'User registered successfully', 
-      userId: result.insertedId.toString() 
-    } 
-  };
-});
-```
-
-# src/app/api/quotes/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { QuoteService } from '@/services/quoteService';
-import { Quote, QuoteCreateRequest } from '@/types';
-
-export const GET = createApiHandler<Quote[]>(async () => {
-  const quotes = await QuoteService.getAllQuotes();
-  return { data: quotes };
-});
-
-export const POST = createApiHandler<Quote>(async (request) => {
-  const data: QuoteCreateRequest = await request.json();
-  
-  if (!data.customer || !data.installPrice || !data.deliveryPrice || !data.monthlyRate || !data.components) {
-    throw new Error('Missing required fields');
-  }
-
-  const quote = await QuoteService.createQuote(data);
-  return { data: quote };
-});
-```
-
-# src/app/api/distance/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { Client } from '@googlemaps/google-maps-services-js';
-
-const client = new Client({});
-
-export const GET = createApiHandler<{ distance: number }>(async (request) => {
-  const { searchParams } = new URL(request.url);
-  const origin = searchParams.get('origin');
-  const destination = searchParams.get('destination');
-
-  if (!origin || !destination) {
-    throw new Error('Origin and destination are required');
-  }
-
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_MAPS_API_KEY is not set');
-  }
-
-  const response = await client.distancematrix({
-    params: {
-      origins: [origin],
-      destinations: [destination],
-      key: apiKey,
-    },
-  });
-
-  if (response.data.rows[0].elements[0].status !== 'OK') {
-    throw new Error('Unable to calculate distance');
-  }
-
-  const distance = response.data.rows[0].elements[0].distance.value / 1609.34; // Convert meters to miles
-  return { data: { distance } };
-});
-```
-
-# src/app/api/customers/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { CustomerService } from '@/services/customerService';
-import { Customer, CustomerCreateRequest } from '@/types';
-
-export const POST = createApiHandler<Customer>(async (request) => {
-  const data: CustomerCreateRequest = await request.json();
-  const customer = await CustomerService.createCustomer(data);
-  return { data: customer };
-});
-
-export const GET = createApiHandler<Customer[]>(async () => {
-  const customers = await CustomerService.getAllCustomers();
-  return { data: customers };
-});
 ```
 
 # src/app/api/rental-requests/[id]/route.ts
@@ -9435,6 +9867,39 @@ if (isProduction) {
 }
 ```
 
+# src/app/api/customers/[id]/route.ts
+
+```ts
+import { createApiHandler } from '@/lib/apiHandler';
+import { CustomerService } from '@/services/customerService';
+import { Customer, CustomerCreateRequest, ApiResponse } from '@/types';
+
+export const GET = createApiHandler<Customer>(async (_request, { params }): Promise<ApiResponse<Customer>> => {
+  const customer = await CustomerService.getCustomerById(params.id);
+  if (!customer) {
+    return { error: 'Customer not found' };
+  }
+  return { data: customer };
+});
+
+export const PUT = createApiHandler<Customer>(async (request, { params }): Promise<ApiResponse<Customer>> => {
+  const data: CustomerCreateRequest = await request.json();
+  const updatedCustomer = await CustomerService.updateCustomer(params.id, data);
+  if (!updatedCustomer) {
+    return { error: 'Customer not found' };
+  }
+  return { data: updatedCustomer };
+});
+
+export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }): Promise<ApiResponse<{ message: string }>> => {
+  const result = await CustomerService.deleteCustomer(params.id);
+  if (!result) {
+    return { error: 'Customer not found' };
+  }
+  return { data: { message: 'Customer deleted successfully' } };
+});
+```
+
 # src/app/api/quotes/[id]/route.ts
 
 ```ts
@@ -9466,39 +9931,6 @@ export const DELETE = createApiHandler<{ message: string }>(async (_request: Nex
     return { error: 'Quote not found' };
   }
   return { data: { message: 'Quote deleted successfully' } };
-});
-```
-
-# src/app/api/customers/[id]/route.ts
-
-```ts
-import { createApiHandler } from '@/lib/apiHandler';
-import { CustomerService } from '@/services/customerService';
-import { Customer, CustomerCreateRequest, ApiResponse } from '@/types';
-
-export const GET = createApiHandler<Customer>(async (_request, { params }): Promise<ApiResponse<Customer>> => {
-  const customer = await CustomerService.getCustomerById(params.id);
-  if (!customer) {
-    return { error: 'Customer not found' };
-  }
-  return { data: customer };
-});
-
-export const PUT = createApiHandler<Customer>(async (request, { params }): Promise<ApiResponse<Customer>> => {
-  const data: CustomerCreateRequest = await request.json();
-  const updatedCustomer = await CustomerService.updateCustomer(params.id, data);
-  if (!updatedCustomer) {
-    return { error: 'Customer not found' };
-  }
-  return { data: updatedCustomer };
-});
-
-export const DELETE = createApiHandler<{ message: string }>(async (_request, { params }): Promise<ApiResponse<{ message: string }>> => {
-  const result = await CustomerService.deleteCustomer(params.id);
-  if (!result) {
-    return { error: 'Customer not found' };
-  }
-  return { data: { message: 'Customer deleted successfully' } };
 });
 ```
 

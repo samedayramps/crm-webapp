@@ -1,7 +1,6 @@
-// src/app/store/quotesSlice.ts
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { Quote, QuoteCreateRequest } from '@/types';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 
 interface QuotesState {
   quotes: Quote[];
@@ -19,8 +18,12 @@ export const fetchQuotes = createAsyncThunk<Quote[], void, { rejectValue: string
   'quotes/fetchQuotes',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get<Quote[]>('/quotes');
-      return response.data ?? [];
+      const response = await apiClient.get<Quote[]>('/quotes');
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch quotes');
+      }
     } catch (error) {
       return rejectWithValue('Failed to fetch quotes');
     }
@@ -31,11 +34,12 @@ export const createQuote = createAsyncThunk<Quote, QuoteCreateRequest, { rejectV
   'quotes/createQuote',
   async (quoteData, { rejectWithValue }) => {
     try {
-      const response = await api.post<Quote>('/quotes', quoteData);
-      if (!response.data) {
-        throw new Error('Failed to create quote');
+      const response = await apiClient.post<Quote>('/quotes', quoteData);
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to create quote');
       }
-      return response.data;
     } catch (error) {
       return rejectWithValue((error as Error).message || 'Failed to create quote');
     }

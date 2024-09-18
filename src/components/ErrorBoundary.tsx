@@ -1,5 +1,3 @@
-'use client';
-
 import React, { ErrorInfo, ReactNode } from 'react';
 
 interface ErrorBoundaryProps {
@@ -16,9 +14,7 @@ class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundarySta
     this.state = { hasError: false };
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // We're not using the error parameter in this method
+  static getDerivedStateFromError(): ErrorBoundaryState {
     return { hasError: true };
   }
 

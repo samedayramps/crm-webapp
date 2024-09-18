@@ -7,7 +7,7 @@ const CustomerSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true },
   installAddress: { type: String, required: true },
   mobilityAids: [{ type: String }],
-});
+}, { timestamps: true });
 
 export interface ICustomer extends Document {
   firstName: string;

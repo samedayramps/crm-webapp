@@ -3,8 +3,10 @@
 import { useSession } from 'next-auth/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useEffect } from 'react';
+import LoadingSpinner from '@/components/LoadingSpinner'; // Create this component
 
-const publicPaths = ['/login', '/register']; // Add any public paths here
+const PUBLIC_PATHS = ['/login', '/register'];
+const DEFAULT_AUTH_PATH = '/';
 
 export default function AuthWrapper({ children }: { children: React.ReactNode }) {
   const { data: session, status } = useSession();
@@ -12,17 +14,17 @@ export default function AuthWrapper({ children }: { children: React.ReactNode })
   const pathname = usePathname();
 
   useEffect(() => {
-    if (status === 'loading') return; // Do nothing while loading
+    if (status === 'loading') return;
 
-    if (!session && !publicPaths.includes(pathname)) {
+    if (!session && !PUBLIC_PATHS.includes(pathname)) {
       router.push(`/login?callbackUrl=${encodeURIComponent(pathname)}`);
-    } else if (session && publicPaths.includes(pathname)) {
-      router.push('/');
+    } else if (session && PUBLIC_PATHS.includes(pathname)) {
+      router.push(DEFAULT_AUTH_PATH);
     }
   }, [session, status, router, pathname]);
 
   if (status === 'loading') {
-    return <div>Loading...</div>;
+    return <LoadingSpinner />;
   }
 
   return <>{children}</>;

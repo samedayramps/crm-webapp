@@ -1,3 +1,4 @@
+export { User } from './User';
 export { Customer } from './Customer';
 export type { ICustomer } from './Customer';
 export { RampDetails } from './RampDetails';

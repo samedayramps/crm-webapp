@@ -1,5 +1,5 @@
 import { createApiHandler } from '@/lib/apiHandler';
-import { SearchService } from '@/services/searchService';
+import { CustomerService } from '@/services/customerService';
 import { Customer } from '@/types';
 
 export const GET = createApiHandler<Customer[]>(async (request) => {
@@ -7,9 +7,9 @@ export const GET = createApiHandler<Customer[]>(async (request) => {
   const term = searchParams.get('term');
 
   if (!term) {
-    throw new Error('Search term is required');
+    return { error: 'Search term is required' };
   }
 
-  const customers = await SearchService.searchCustomers(term);
+  const customers = await CustomerService.searchCustomers(term);
   return { data: customers };
 });

@@ -9,7 +9,7 @@ export interface Customer {
   email: string;
   phoneNumber: string;
   installAddress?: string;
-  mobilityAids: string[]; // Changed from optional to required, with an empty array as default
+  mobilityAids: string[];
 }
 
 export interface CustomerCreateRequest {
@@ -80,6 +80,19 @@ export interface QuoteCreateRequest {
   monthlyRate: number;
   components: RampComponent[];
   status: string;
+}
+
+export interface QuoteData {
+  customer: string; // Assuming this is the customer ID
+  installPrice: number;
+  deliveryPrice: number;
+  monthlyRate: number;
+  components: RampComponent[];
+  status: 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED';
+  createdAt: string;
+  sentAt: string | null;
+  signedAt: string | null;
+  paymentStatus: 'PENDING' | 'PAID';
 }
 
 export interface Settings {

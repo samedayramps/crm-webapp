@@ -4,6 +4,8 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ActionButton } from '@/components/ui/ActionButton';
 import { IRentalRequest } from '@/models';
+import { apiClient } from '@/utils/api';
+import { Customer } from '@/types';
 
 export default function RentalRequestDetails({ params }: { params: { id: string } }) {
   const [request, setRequest] = useState<IRentalRequest | null>(null);
@@ -31,6 +33,32 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
     fetchRentalRequest();
   }, [params.id]);
 
+  const handleCreateCustomer = async () => {
+    if (!request) return;
+
+    try {
+      const customerData = {
+        firstName: request.firstName,
+        lastName: request.lastName,
+        email: request.email,
+        phoneNumber: request.phone,
+        installAddress: request.installAddress,
+        mobilityAids: request.mobilityAids || [],
+      };
+
+      const response = await apiClient.post<Customer>('/customers', customerData);
+      
+      if (response.data && '_id' in response.data) {
+        router.push(`/customers/${response.data._id}`);
+      } else {
+        throw new Error('Customer ID not returned from server');
+      }
+    } catch (err) {
+      console.error('Error creating customer:', err);
+      alert('Failed to create customer. Please try again.');
+    }
+  };
+
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this rental request?')) {
       try {
@@ -45,42 +73,6 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
         console.error('Error deleting rental request:', err);
         alert('Failed to delete rental request. Please try again.');
       }
-    }
-  };
-
-  const handleCreateCustomer = async () => {
-    if (!request) return;
-
-    try {
-      const response = await fetch('/api/customers', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          firstName: request.firstName,
-          lastName: request.lastName,
-          email: request.email,
-          phoneNumber: request.phone,
-          installAddress: request.installAddress,
-          mobilityAids: request.mobilityAids || [],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to create customer');
-      }
-
-      const result = await response.json();
-      console.log('Customer creation response:', result);
-      if (result.data && result.data.id) {
-        router.push(`/customers/${result.data.id}`);
-      } else {
-        throw new Error('Customer ID not returned from server');
-      }
-    } catch (err) {
-      console.error('Error creating customer:', err);
-      alert('Failed to create customer. Please try again.');
     }
   };
 

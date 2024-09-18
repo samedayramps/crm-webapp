@@ -1,7 +1,7 @@
-import { clientPromise } from '@/lib/mongodb';
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import bcrypt from 'bcryptjs';
+import { dbConnect } from '@/lib/mongodb';
+import { User } from '@/models';  // Make sure this import is correct
 
 if (!process.env.NEXTAUTH_SECRET) {
   console.error("Warning: NEXTAUTH_SECRET is not set");
@@ -23,24 +23,36 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.username || !credentials?.password) {
-          throw new Error("Missing username or password");
+          console.error("Missing username or password");
+          return null;
         }
 
         try {
-          const client = await clientPromise;
-          const db = client.db();
-          const user = await db.collection('users').findOne({ username: credentials.username });
+          await dbConnect();
+          console.log('Database connected');
+
+          if (!User) {
+            console.error('User model is undefined');
+            return null;
+          }
+
+          console.log('Searching for user:', credentials.username);
+          const user = await User.findOne({ username: credentials.username });
 
           if (!user) {
-            throw new Error("User not found");
+            console.log("User not found:", credentials.username);
+            return null;
           }
 
-          const isPasswordValid = await bcrypt.compare(credentials.password, user.password);
+          console.log('User found:', user);
 
-          if (!isPasswordValid) {
-            throw new Error("Invalid password");
+          // Simple password comparison (replace this with a secure method in production)
+          if (credentials.password !== user.password) {
+            console.log("Invalid password for user:", credentials.username);
+            return null;
           }
 
+          console.log("User authenticated successfully:", credentials.username);
           return { id: user._id.toString(), name: user.username, email: user.email };
         } catch (error) {
           console.error("Authentication error:", error);

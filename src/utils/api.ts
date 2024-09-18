@@ -1,36 +1,49 @@
-// src/utils/api.ts
+import axios from 'axios';
 
-import { ApiResponse } from '../types';
+const api = axios.create({
+  baseURL: '/api',
+});
 
-async function fetchAPI<T>(
-  endpoint: string,
-  method: string = 'GET',
-  body?: object
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(endpoint, {
-      method,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('API error:', error);
-    return { error: error instanceof Error ? error.message : 'An unknown error occurred' };
-  }
+export interface ApiResponse<T> {
+  data?: T;
+  error?: string;
 }
 
-export const api = {
-  get: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`),
-  post: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'POST', body),
-  put: <T>(endpoint: string, body: object) => fetchAPI<T>(`/api${endpoint}`, 'PUT', body),
-  delete: <T>(endpoint: string) => fetchAPI<T>(`/api${endpoint}`, 'DELETE'),
+export const apiClient = {
+  get: async <T>(url: string): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.get<T>(url);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while fetching data' };
+    }
+  },
+  post: async <T>(url: string, data: unknown): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.post<T>(url, data);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while posting data' };
+    }
+  },
+  put: async <T>(url: string, data: unknown): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.put<T>(url, data);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while updating data' };
+    }
+  },
+  delete: async <T>(url: string): Promise<ApiResponse<T>> => {
+    try {
+      const response = await api.delete<T>(url);
+      return { data: response.data };
+    } catch (error) {
+      console.error('API error:', error);
+      return { error: 'An error occurred while deleting data' };
+    }
+  },
 };

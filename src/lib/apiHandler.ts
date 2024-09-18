@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
 import { ApiResponse } from '@/types';
 
 type ApiHandler<T> = (
@@ -9,8 +8,6 @@ type ApiHandler<T> = (
 
 export function createApiHandler<T>(handler: ApiHandler<T>) {
   return async function(req: NextRequest, context: { params: { [key: string]: string } }) {
-    await dbConnect();
-
     try {
       const response = await handler(req, context);
       return NextResponse.json(response);

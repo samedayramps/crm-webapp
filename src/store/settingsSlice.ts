@@ -1,7 +1,6 @@
-// src/app/store/settingsSlice.ts
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import { Settings, SettingsUpdateRequest } from '@/types';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 
 interface SettingsState {
   settings: Settings | null;
@@ -19,11 +18,12 @@ export const fetchSettings = createAsyncThunk<Settings, void, { rejectValue: str
   'settings/fetchSettings',
   async (_, { rejectWithValue }) => {
     try {
-      const response = await api.get<Settings>('/settings');
-      if (!response.data) {
-        throw new Error('Failed to fetch settings');
+      const response = await apiClient.get<Settings>('/settings');
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to fetch settings');
       }
-      return response.data;
     } catch (error) {
       return rejectWithValue((error as Error).message || 'Failed to fetch settings');
     }
@@ -34,11 +34,12 @@ export const updateSettings = createAsyncThunk<Settings, SettingsUpdateRequest, 
   'settings/updateSettings',
   async (settingsData, { rejectWithValue }) => {
     try {
-      const response = await api.post<Settings>('/settings', settingsData);
-      if (!response.data) {
-        throw new Error('Failed to update settings');
+      const response = await apiClient.post<Settings>('/settings', settingsData);
+      if (response.data) {
+        return response.data;
+      } else {
+        throw new Error(response.error || 'Failed to update settings');
       }
-      return response.data;
     } catch (error) {
       return rejectWithValue((error as Error).message || 'Failed to update settings');
     }

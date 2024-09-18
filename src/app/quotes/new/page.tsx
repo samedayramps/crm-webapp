@@ -82,7 +82,7 @@ const NewQuotePage: React.FC = () => {
           <CustomerDetails 
             customer={selectedCustomer} 
             showActions={false}
-            onCustomerUpdate={(updatedCustomer) => setSelectedCustomer(updatedCustomer)}
+            onCustomerUpdate={(updatedCustomer: Customer) => setSelectedCustomer(updatedCustomer)}
           />
         </div>
       )}

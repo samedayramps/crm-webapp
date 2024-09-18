@@ -1,9 +1,11 @@
+// src/app/rental-requests/page.tsx
+
 'use client';
 
 import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 import { RentalRequest } from '@/types';
 
 const RentalRequestCard: React.FC<{ request: RentalRequest }> = ({ request }) => (
@@ -28,11 +30,12 @@ const RentalRequestsPage = () => {
   useEffect(() => {
     const fetchRentalRequests = async () => {
       try {
-        const response = await api.get<RentalRequest[]>('/rental-requests');
-        if (response.data) {
-          setRentalRequests(Array.isArray(response.data) ? response.data : []);
-        } else if (response.error) {
-          setError(response.error);
+        setIsLoading(true);
+        const response = await apiClient.get<{ data: RentalRequest[] }>('/rental-requests');
+        if (response.data && Array.isArray(response.data.data)) {
+          setRentalRequests(response.data.data);
+        } else {
+          throw new Error('Invalid data format received from server');
         }
       } catch (err) {
         setError('Failed to load rental requests. Please try again later.');
@@ -45,6 +48,9 @@ const RentalRequestsPage = () => {
     fetchRentalRequests();
   }, []);
 
+  if (isLoading) return <div>Loading rental requests...</div>;
+  if (error) return <div className="text-red-500">{error}</div>;
+
   return (
     <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
       <h1 className="text-3xl font-bold mb-6">Rental Requests</h1>
@@ -53,11 +59,7 @@ const RentalRequestsPage = () => {
           New Rental Request
         </Link>
       </div>
-      {isLoading ? (
-        <p>Loading rental requests...</p>
-      ) : error ? (
-        <p className="text-red-500">{error}</p>
-      ) : rentalRequests.length === 0 ? (
+      {rentalRequests.length === 0 ? (
         <p>No rental requests found.</p>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

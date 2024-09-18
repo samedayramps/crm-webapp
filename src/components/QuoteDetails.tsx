@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuoteContext } from '@/contexts/QuoteContext';
 import { Quote, RampComponent } from '@/types';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 import CustomerDetails from '@/components/CustomerDetails';
 import RampConfigurationV2 from '@/components/RampConfiguration';
 import PricingComponent from '@/components/PricingComponent';
@@ -23,14 +23,19 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
 
   useEffect(() => {
     const fetchQuote = async () => {
-      setIsLoading(true);
-      const response = await api.get<Quote>(`/quotes/${id}`);
-      if (response.data) {
-        setQuote(response.data);
-      } else if (response.error) {
-        setError(response.error);
+      try {
+        const response = await apiClient.get<Quote>(`/quotes/${id}`);
+        if (response.data) {
+          setQuote(response.data);
+        } else {
+          throw new Error('Quote not found');
+        }
+      } catch (error) {
+        console.error('Error fetching quote:', error);
+        setError('Failed to load quote. Please try again later.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     fetchQuote();
@@ -46,8 +51,8 @@ const QuoteDetails: React.FC<QuoteDetailsProps> = ({ id }) => {
     const response = await updateQuote(id, quote);
     if (response.error) {
       setError(response.error);
-    } else {
-      setQuote(response.data!);
+    } else if (response.data) {
+      setQuote(response.data);
       setIsEditing(false);
     }
   }, [quote, id, updateQuote]);

@@ -1,7 +1,9 @@
+// src/contexts/QuoteContext.tsx
+
 'use client';
 
 import React, { createContext, useState, useContext, ReactNode, useCallback, useEffect } from 'react';
-import { api } from '@/utils/api';
+import { apiClient } from '@/utils/api';
 import { Quote, ApiResponse } from '@/types';
 
 interface QuoteContextType {
@@ -33,9 +35,9 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     setLoading(true);
     setError(null);
     try {
-      const response = await api.get<Quote[]>('/quotes');
+      const response = await apiClient.get<Quote[]>('/quotes');
       if (response.data) {
-        setQuotes(Array.isArray(response.data) ? response.data : []);
+        setQuotes(response.data);
       } else if (response.error) {
         setError(response.error);
       }
@@ -51,11 +53,11 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   }, [fetchQuotes]);
 
   const getQuote = async (id: string): Promise<ApiResponse<Quote>> => {
-    return await api.get<Quote>(`/quotes/${id}`);
+    return await apiClient.get<Quote>(`/quotes/${id}`);
   };
 
   const addQuote = async (quote: Omit<Quote, '_id'>): Promise<ApiResponse<Quote>> => {
-    const response = await api.post<Quote>('/quotes', quote);
+    const response = await apiClient.post<Quote>('/quotes', quote);
     if (response.data) {
       setQuotes(prevQuotes => [...prevQuotes, response.data!]);
     }
@@ -63,7 +65,7 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const updateQuote = async (id: string, updatedQuote: Partial<Quote>): Promise<ApiResponse<Quote>> => {
-    const response = await api.put<Quote>(`/quotes/${id}`, updatedQuote);
+    const response = await apiClient.put<Quote>(`/quotes/${id}`, updatedQuote);
     if (response.data) {
       setQuotes(prevQuotes => prevQuotes.map(q => q._id === id ? response.data! : q));
     }
@@ -71,7 +73,7 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   };
 
   const deleteQuote = async (id: string): Promise<ApiResponse<void>> => {
-    const response = await api.delete<void>(`/quotes/${id}`);
+    const response = await apiClient.delete<void>(`/quotes/${id}`);
     if (!response.error) {
       setQuotes(prevQuotes => prevQuotes.filter(q => q._id !== id));
     }

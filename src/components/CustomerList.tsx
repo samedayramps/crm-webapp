@@ -14,13 +14,20 @@ const CustomerList: React.FC = () => {
     dispatch(fetchCustomers());
   }, [dispatch]);
 
+  useEffect(() => {
+    console.log('Customers state:', customers);
+  }, [customers]);
+
   if (loading) return <div>Loading customers...</div>;
   if (error) return <div>Error: {error}</div>;
+
+  // Check if customers is an array and has items
+  const hasCustomers = Array.isArray(customers) && customers.length > 0;
 
   return (
     <div>
       <h2 className="text-2xl font-bold mb-4">Customers</h2>
-      {customers.length === 0 ? (
+      {!hasCustomers ? (
         <p>No customers found.</p>
       ) : (
         <table className="min-w-full divide-y divide-gray-200">
