@@ -19,7 +19,7 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
           throw new Error('Failed to fetch rental request');
         }
         const data = await response.json();
-        setRequest(data);
+        setRequest(data.data);
       } catch (err) {
         setError('Failed to load rental request. Please try again later.');
         console.error('Error fetching rental request:', err);
@@ -63,7 +63,7 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
           email: request.email,
           phoneNumber: request.phone,
           installAddress: request.installAddress,
-          mobilityAids: request.mobilityAids,
+          mobilityAids: request.mobilityAids || [],
         }),
       });
 
@@ -99,8 +99,8 @@ export default function RentalRequestDetails({ params }: { params: { id: string 
         <p><strong>Installation Address:</strong> {request.installAddress}</p>
         <p><strong>Ramp Length:</strong> {request.knowRampLength === 'yes' ? `${request.estimatedRampLength} feet` : 'Unknown'}</p>
         <p><strong>Rental Duration:</strong> {request.knowRentalDuration === 'yes' ? `${request.estimatedRentalDuration} days` : 'Unknown'}</p>
-        <p><strong>Mobility Aids:</strong> {request.mobilityAids.join(', ')}</p>
-        <p><strong>Submitted:</strong> {new Date(request.createdAt).toLocaleString()}</p>
+        <p><strong>Mobility Aids:</strong> {request.mobilityAids && request.mobilityAids.length > 0 ? request.mobilityAids.join(', ') : 'None specified'}</p>
+        <p><strong>Submitted:</strong> {request.createdAt ? new Date(request.createdAt).toLocaleString() : 'Unknown'}</p>
       </div>
       <div className="flex justify-between mt-6">
         <ActionButton onClick={handleCreateCustomer} label="Create Customer" variant="default" />

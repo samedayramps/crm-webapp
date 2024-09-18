@@ -1,70 +1,36 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
+import { NextRequest } from 'next/server';
+import { createApiHandler } from '@/lib/apiHandler';
 import { RentalRequest } from '@/models';
-import { allowedOrigins } from '@/config/cors';
+import { RentalRequest as RentalRequestType, RentalRequestCreateRequest, ApiResponse } from '@/types';
+import { rateLimit } from '@/lib/rate-limit';
+import { cors } from '@/lib/cors';
 
-// Define the ApiResponse type
-type ApiResponse<T> = {
-  data?: T;
-  error?: string;
-};
-
-// Updated CORS function
-function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
-  const origin = req.headers.get('origin');
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    res.headers.set('Access-Control-Allow-Origin', origin);
-  } else {
-    res.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
-  }
-  
-  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
-  res.headers.set('Access-Control-Allow-Credentials', 'true');
-  return res;
-}
+const limiter = rateLimit(10, 60 * 1000); // 10 requests per minute
 
 export async function OPTIONS(req: NextRequest) {
-  const res = new NextResponse(null, { status: 200 });
-  return setCORSHeaders(req, res);
+  return cors(req);
 }
 
-export async function POST(req: NextRequest) {
-  await dbConnect();
-
-  try {
-    const body = await req.json();
-    console.log('Received body:', body);
-
-    // Create a new rental request
-    const newRentalRequest = new RentalRequest(body);
-    await newRentalRequest.save();
-
-    const response: ApiResponse<typeof body> = { data: body };
-    const res = NextResponse.json(response, { status: 201 });
-    return setCORSHeaders(req, res);
-  } catch (error) {
-    console.error('Error in POST /api/rental-requests:', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response: ApiResponse<never> = { error: errorMessage };
-    const res = NextResponse.json(response, { status: 500 });
-    return setCORSHeaders(req, res);
+export const POST = createApiHandler<RentalRequestType>(async (request: NextRequest): Promise<ApiResponse<RentalRequestType>> => {
+  // Apply rate limiting
+  if (!limiter.check(request, 'RENTAL_REQUEST_CREATE')) {
+    return { error: 'Rate limit exceeded' };
   }
-}
 
-export async function GET(req: NextRequest) {
-  await dbConnect();
+  const body: RentalRequestCreateRequest = await request.json();
+  console.log('Received body:', body);
 
-  try {
-    const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
-    const response: ApiResponse<typeof rentalRequests> = { data: rentalRequests };
-    const res = NextResponse.json(response);
-    return setCORSHeaders(req, res);
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
-    const response: ApiResponse<never> = { error: errorMessage };
-    const res = NextResponse.json(response, { status: 500 });
-    return setCORSHeaders(req, res);
+  // Basic validation
+  if (!body.firstName || !body.lastName || !body.email || !body.phone) {
+    return { error: 'Missing required fields' };
   }
-}
+
+  // Create a new rental request
+  const newRentalRequest = await RentalRequest.create(body);
+  return { data: newRentalRequest.toObject() };
+});
+
+export const GET = createApiHandler<RentalRequestType[]>(async (): Promise<ApiResponse<RentalRequestType[]>> => {
+  const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
+  return { data: rentalRequests.map(request => request.toObject()) };
+});
