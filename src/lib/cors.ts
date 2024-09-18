@@ -1,34 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { allowedOrigins } from '@/config/cors';
 
-export function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
-  const origin = req.headers.get('origin');
-  
-  if (origin && allowedOrigins.includes(origin)) {
-    res.headers.set('Access-Control-Allow-Origin', origin);
-    res.headers.set('Access-Control-Allow-Credentials', 'true');
-    res.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    res.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+type HandlerFunction = (req: NextRequest) => Promise<NextResponse>;
+
+export function corsMiddleware(request: NextRequest, handler: HandlerFunction) {
+  const origin = request.headers.get('origin') || '';
+
+  // Handle preflight requests
+  if (request.method === 'OPTIONS') {
+    return handlePreflight(origin);
   }
 
-  return res;
+  // Handle actual requests
+  return handleActualRequest(origin, request, handler);
 }
 
-export async function corsMiddleware(req: NextRequest) {
-  const origin = req.headers.get('origin');
+function handlePreflight(origin: string) {
+  if (allowedOrigins.includes(origin)) {
+    const response = new NextResponse(null, { status: 204 });
+    setHeaders(response, origin);
+    return response;
+  }
+  return new NextResponse(null, { status: 204 });
+}
 
-  if (origin && allowedOrigins.includes(origin)) {
-    return new NextResponse(null, {
-      status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': origin,
-        'Access-Control-Allow-Credentials': 'true',
-        'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-        'Access-Control-Max-Age': '86400',
-      },
-    });
+async function handleActualRequest(origin: string, request: NextRequest, handler: HandlerFunction) {
+  const response = await handler(request);
+
+  if (allowedOrigins.includes(origin)) {
+    setHeaders(response, origin);
   }
 
-  return new NextResponse(null, { status: 204 });
+  return response;
+}
+
+function setHeaders(response: NextResponse, origin: string) {
+  response.headers.set('Access-Control-Allow-Origin', origin);
+  response.headers.set('Access-Control-Allow-Credentials', 'true');
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }

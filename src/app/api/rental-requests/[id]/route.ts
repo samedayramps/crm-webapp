@@ -1,11 +1,13 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createApiHandler } from '@/lib/apiHandler';
 import { RentalRequest } from '@/models';
 import { RentalRequest as RentalRequestType, RentalRequestCreateRequest, ApiResponse } from '@/types';
 import { corsMiddleware } from '@/lib/cors';
 
 export async function OPTIONS(req: NextRequest) {
-  return corsMiddleware(req);
+  return corsMiddleware(req, async () => {
+    return new NextResponse(null, { status: 204 });
+  });
 }
 
 export const GET = createApiHandler<RentalRequestType>(async (_request: NextRequest, { params }): Promise<ApiResponse<RentalRequestType>> => {
