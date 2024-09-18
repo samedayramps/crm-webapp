@@ -1,6 +1,6 @@
+import { clientPromise } from '@/lib/mongodb';
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
 if (!process.env.NEXTAUTH_SECRET) {
