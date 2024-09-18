@@ -20,19 +20,19 @@ const RampDetailsSchema = new mongoose.Schema({
 });
 
 const RentalRequestSchema = new mongoose.Schema({
-  firstName: { type: String, required: true },
-  lastName: { type: String, required: true },
-  email: { type: String, required: true },
-  phone: { type: String, required: true },
-  knowRampLength: { type: String, required: true },
-  estimatedRampLength: { type: String },
-  knowRentalDuration: { type: String, required: true },
-  estimatedRentalDuration: { type: String },
-  installationTimeframe: { type: String, required: true },
-  mobilityAids: [{ type: String }],
-  installAddress: { type: String, required: true },
+  firstName: String,
+  lastName: String,
+  email: String,
+  phone: String,
+  knowRampLength: String,
+  estimatedRampLength: String,
+  knowRentalDuration: String,
+  estimatedRentalDuration: String,
+  installationTimeframe: String,
+  mobilityAids: [String],
+  installAddress: String,
   createdAt: { type: Date, default: Date.now },
-});
+}, { strict: false });
 
 const QuoteSchema = new mongoose.Schema({
   customer: { type: mongoose.Schema.Types.ObjectId, ref: 'Customer', required: true },

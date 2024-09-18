@@ -127,7 +127,6 @@ module.exports = {
     "bcryptjs": "^2.4.3",
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
-    "cors": "^2.8.5",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^0.441.0",
     "mongodb": "^5.9.2",
@@ -171,7 +170,8 @@ export default nextConfig;
 # next.config.js
 
 ```js
-module.exports = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   async headers() {
     return [
       {
@@ -179,13 +179,15 @@ module.exports = {
         headers: [
           { key: 'Access-Control-Allow-Credentials', value: 'true' },
           { key: 'Access-Control-Allow-Origin', value: '*' },
-          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT' },
+          { key: 'Access-Control-Allow-Methods', value: 'GET,DELETE,PATCH,POST,PUT,OPTIONS' },
           { key: 'Access-Control-Allow-Headers', value: 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version' },
         ],
       },
     ];
   },
 };
+
+module.exports = nextConfig;
 ```
 
 # next-env.d.ts
@@ -967,29 +969,38 @@ if (process.env.NODE_ENV === 'development') {
   clientPromise = client.connect();
 }
 
-// Export a module-scoped MongoClient promise. By doing this in a
-// separate module, the client can be shared across functions.
-export default clientPromise;
+// Export the clientPromise
+export { clientPromise };
 
 // Cached connection for mongoose
 let cachedConnection: typeof mongoose | null = null;
 
-export async function dbConnect(): Promise<void> {
+export async function dbConnect(): Promise<typeof mongoose> {
   if (cachedConnection) {
-    return;
+    return cachedConnection;
   }
 
   if (mongoose.connection.readyState >= 1) {
     cachedConnection = mongoose;
-    return;
+    return cachedConnection;
   }
 
   try {
     cachedConnection = await mongoose.connect(uri, options);
+    return cachedConnection;
   } catch (e) {
     throw e;
   }
 }
+
+// Create a named object for the default export
+const mongodbConnection = {
+  clientPromise,
+  dbConnect,
+};
+
+// Export the named object as default
+export default mongodbConnection;
 ```
 
 # src/hooks/usePricingVariables.ts
@@ -1222,6 +1233,16 @@ export const QuoteProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     </QuoteContext.Provider>
   );
 };
+```
+
+# src/config/cors.ts
+
+```ts
+export const allowedOrigins = [
+    'https://www.samedayramps.com',
+    'https://form.samedayramps.com',
+    'http://localhost:3000'  // Include this for local development
+  ];
 ```
 
 # src/components/SessionWrapper.tsx
@@ -2512,346 +2533,6 @@ export default function App({ Component, pageProps: { session, ...pageProps } }:
 }
 ```
 
-# src/components/ui/Select.tsx
-
-```tsx
-import * as React from "react"
-
-export interface SelectProps
-  extends React.SelectHTMLAttributes<HTMLSelectElement> {
-  error?: string;
-}
-
-const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
-  ({ className, error, children, ...props }, ref) => {
-    return (
-      <div>
-        <select
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
-          ref={ref}
-          {...props}
-        >
-          {children}
-        </select>
-        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
-      </div>
-    )
-  }
-)
-Select.displayName = "Select"
-
-export { Select }
-```
-
-# src/components/ui/Input.tsx
-
-```tsx
-import * as React from "react"
-
-export interface InputProps
-  extends React.InputHTMLAttributes<HTMLInputElement> {
-  error?: string;
-}
-
-const Input = React.forwardRef<HTMLInputElement, InputProps>(
-  ({ className, type, error, ...props }, ref) => {
-    return (
-      <div>
-        <input
-          type={type}
-          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
-          ref={ref}
-          {...props}
-        />
-        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
-      </div>
-    )
-  }
-)
-Input.displayName = "Input"
-
-export { Input }
-```
-
-# src/components/ui/FormattedPhoneInput.tsx
-
-```tsx
-'use client';
-
-import React, { useState, useEffect, useRef } from 'react';
-import { Input } from '@/components/ui/Input';
-
-interface FormattedPhoneInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  className?: string;
-}
-
-export const FormattedPhoneInput: React.FC<FormattedPhoneInputProps> = ({
-  value,
-  onChange,
-  error,
-  className
-}) => {
-  const [formattedValue, setFormattedValue] = useState('');
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const format = (val: string) => {
-    const digits = val.replace(/\D/g, '');
-    const chars = digits.split('');
-    let formatted = '(___) ___-____';
-    chars.forEach((char) => {
-      formatted = formatted.replace('_', char);
-    });
-    return formatted;
-  };
-
-  useEffect(() => {
-    setFormattedValue(format(value));
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const input = e.target;
-    const selectionStart = input.selectionStart || 0; // Provide a default value
-    const formatted = format(input.value);
-    const digits = formatted.replace(/\D/g, '');
-    
-    onChange(digits);
-
-    // Set cursor position after React updates the input
-    setTimeout(() => {
-      if (inputRef.current) {
-        const newCursorPosition = selectionStart + (formatted.length - input.value.length);
-        inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
-      }
-    }, 0);
-  };
-
-  return (
-    <Input
-      ref={inputRef}
-      type="tel"
-      value={formattedValue}
-      onChange={handleChange}
-      placeholder="(___) ___-____"
-      error={error}
-      className={className}
-    />
-  );
-};
-```
-
-# src/components/ui/Checkbox.tsx
-
-```tsx
-// src/components/ui/checkbox.tsx
-
-import * as React from "react"
-import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
-import { Check } from "lucide-react"
-
-import { cn } from "../../lib/utils"
-
-const Checkbox = React.forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
-      className
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator className={cn("flex items-center justify-center text-current")}>
-      <Check className="h-4 w-4" />
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-))
-Checkbox.displayName = CheckboxPrimitive.Root.displayName
-
-export { Checkbox }
-```
-
-# src/components/ui/Button.tsx
-
-```tsx
-import * as React from "react"
-import { Slot } from "@radix-ui/react-slot"
-import { cva, type VariantProps } from "class-variance-authority"
-
-import { cn } from "@/lib/utils"
-
-const buttonVariants = cva(
-  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive:
-          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline:
-          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary:
-          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  }
-)
-
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean
-}
-
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button"
-    return (
-      <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
-        ref={ref}
-        {...props}
-      />
-    )
-  }
-)
-Button.displayName = "Button"
-
-export { Button, buttonVariants }
-```
-
-# src/components/ui/AddressField.tsx
-
-```tsx
-'use client';
-
-import React, { useEffect, useRef, useState } from 'react';
-import { Input } from './Input';
-
-interface AddressFieldProps {
-  value: string;
-  onChange: (value: string) => void;
-  error?: string;
-  label?: string;
-  placeholder?: string;
-}
-
-declare global {
-  interface Window {
-    google: {
-      maps: {
-        places: {
-          Autocomplete: new (input: HTMLInputElement, options?: AutocompleteOptions) => google.maps.places.Autocomplete;
-        };
-      };
-    };
-  }
-}
-
-interface AutocompleteOptions {
-  types: string[];
-  componentRestrictions: { country: string };
-  fields: string[];
-}
-
-interface Place {
-  formatted_address?: string;
-}
-
-export const AddressField: React.FC<AddressFieldProps> = ({
-  value,
-  onChange,
-  error,
-  label = 'Address',
-  placeholder = 'Enter your address'
-}) => {
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    if (!window.google && !isLoaded) {
-      const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
-      script.async = true;
-      script.onload = () => setIsLoaded(true);
-      document.body.appendChild(script);
-    } else if (window.google && !isLoaded) {
-      setIsLoaded(true);
-    }
-  }, [isLoaded]);
-
-  useEffect(() => {
-    if (isLoaded && inputRef.current) {
-      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-        types: ['address'],
-        componentRestrictions: { country: 'us' },
-        fields: ['formatted_address']
-      });
-
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace() as Place;
-        if (place.formatted_address) {
-          onChange(place.formatted_address);
-        }
-      });
-    }
-  }, [isLoaded, onChange]);
-
-  return (
-    <div>
-      <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
-        {label}
-      </label>
-      <Input
-        ref={inputRef}
-        id="address"
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        error={error}
-        className="mt-1"
-      />
-    </div>
-  );
-};
-```
-
-# src/components/ui/ActionButton.tsx
-
-```tsx
-import React from 'react';
-import { Button } from '@/components/ui/Button';
-
-interface ActionButtonProps {
-  onClick: () => void;
-  label: string;
-  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
-}
-
-export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, variant = 'default' }) => (
-  <Button onClick={onClick} variant={variant}>
-    {label}
-  </Button>
-);
-```
-
 # src/components/RentalRequestForm/RentalRequestForm.tsx
 
 ```tsx
@@ -3394,6 +3075,346 @@ export const ConfirmationPage: React.FC<ConfirmationPageProps> = ({ onStartOver 
 };
 ```
 
+# src/components/ui/Select.tsx
+
+```tsx
+import * as React from "react"
+
+export interface SelectProps
+  extends React.SelectHTMLAttributes<HTMLSelectElement> {
+  error?: string;
+}
+
+const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
+  ({ className, error, children, ...props }, ref) => {
+    return (
+      <div>
+        <select
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
+          ref={ref}
+          {...props}
+        >
+          {children}
+        </select>
+        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+      </div>
+    )
+  }
+)
+Select.displayName = "Select"
+
+export { Select }
+```
+
+# src/components/ui/Input.tsx
+
+```tsx
+import * as React from "react"
+
+export interface InputProps
+  extends React.InputHTMLAttributes<HTMLInputElement> {
+  error?: string;
+}
+
+const Input = React.forwardRef<HTMLInputElement, InputProps>(
+  ({ className, type, error, ...props }, ref) => {
+    return (
+      <div>
+        <input
+          type={type}
+          className={`flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${className} ${error ? 'border-red-500' : ''}`}
+          ref={ref}
+          {...props}
+        />
+        {error && <p className="mt-1 text-sm text-red-500">{error}</p>}
+      </div>
+    )
+  }
+)
+Input.displayName = "Input"
+
+export { Input }
+```
+
+# src/components/ui/FormattedPhoneInput.tsx
+
+```tsx
+'use client';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { Input } from '@/components/ui/Input';
+
+interface FormattedPhoneInputProps {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  className?: string;
+}
+
+export const FormattedPhoneInput: React.FC<FormattedPhoneInputProps> = ({
+  value,
+  onChange,
+  error,
+  className
+}) => {
+  const [formattedValue, setFormattedValue] = useState('');
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const format = (val: string) => {
+    const digits = val.replace(/\D/g, '');
+    const chars = digits.split('');
+    let formatted = '(___) ___-____';
+    chars.forEach((char) => {
+      formatted = formatted.replace('_', char);
+    });
+    return formatted;
+  };
+
+  useEffect(() => {
+    setFormattedValue(format(value));
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const input = e.target;
+    const selectionStart = input.selectionStart || 0; // Provide a default value
+    const formatted = format(input.value);
+    const digits = formatted.replace(/\D/g, '');
+    
+    onChange(digits);
+
+    // Set cursor position after React updates the input
+    setTimeout(() => {
+      if (inputRef.current) {
+        const newCursorPosition = selectionStart + (formatted.length - input.value.length);
+        inputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+      }
+    }, 0);
+  };
+
+  return (
+    <Input
+      ref={inputRef}
+      type="tel"
+      value={formattedValue}
+      onChange={handleChange}
+      placeholder="(___) ___-____"
+      error={error}
+      className={className}
+    />
+  );
+};
+```
+
+# src/components/ui/Checkbox.tsx
+
+```tsx
+// src/components/ui/checkbox.tsx
+
+import * as React from "react"
+import * as CheckboxPrimitive from "@radix-ui/react-checkbox"
+import { Check } from "lucide-react"
+
+import { cn } from "../../lib/utils"
+
+const Checkbox = React.forwardRef<
+  React.ElementRef<typeof CheckboxPrimitive.Root>,
+  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
+>(({ className, ...props }, ref) => (
+  <CheckboxPrimitive.Root
+    ref={ref}
+    className={cn(
+      "peer h-4 w-4 shrink-0 rounded-sm border border-primary ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground",
+      className
+    )}
+    {...props}
+  >
+    <CheckboxPrimitive.Indicator className={cn("flex items-center justify-center text-current")}>
+      <Check className="h-4 w-4" />
+    </CheckboxPrimitive.Indicator>
+  </CheckboxPrimitive.Root>
+))
+Checkbox.displayName = CheckboxPrimitive.Root.displayName
+
+export { Checkbox }
+```
+
+# src/components/ui/Button.tsx
+
+```tsx
+import * as React from "react"
+import { Slot } from "@radix-ui/react-slot"
+import { cva, type VariantProps } from "class-variance-authority"
+
+import { cn } from "@/lib/utils"
+
+const buttonVariants = cva(
+  "inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  {
+    variants: {
+      variant: {
+        default: "bg-primary text-primary-foreground hover:bg-primary/90",
+        destructive:
+          "bg-destructive text-destructive-foreground hover:bg-destructive/90",
+        outline:
+          "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
+        secondary:
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80",
+        ghost: "hover:bg-accent hover:text-accent-foreground",
+        link: "text-primary underline-offset-4 hover:underline",
+      },
+      size: {
+        default: "h-10 px-4 py-2",
+        sm: "h-9 rounded-md px-3",
+        lg: "h-11 rounded-md px-8",
+        icon: "h-10 w-10",
+      },
+    },
+    defaultVariants: {
+      variant: "default",
+      size: "default",
+    },
+  }
+)
+
+export interface ButtonProps
+  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
+  asChild?: boolean
+}
+
+const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button"
+    return (
+      <Comp
+        className={cn(buttonVariants({ variant, size, className }))}
+        ref={ref}
+        {...props}
+      />
+    )
+  }
+)
+Button.displayName = "Button"
+
+export { Button, buttonVariants }
+```
+
+# src/components/ui/AddressField.tsx
+
+```tsx
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Input } from './Input';
+
+interface AddressFieldProps {
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  label?: string;
+  placeholder?: string;
+}
+
+declare global {
+  interface Window {
+    google: {
+      maps: {
+        places: {
+          Autocomplete: new (input: HTMLInputElement, options?: AutocompleteOptions) => google.maps.places.Autocomplete;
+        };
+      };
+    };
+  }
+}
+
+interface AutocompleteOptions {
+  types: string[];
+  componentRestrictions: { country: string };
+  fields: string[];
+}
+
+interface Place {
+  formatted_address?: string;
+}
+
+export const AddressField: React.FC<AddressFieldProps> = ({
+  value,
+  onChange,
+  error,
+  label = 'Address',
+  placeholder = 'Enter your address'
+}) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!window.google && !isLoaded) {
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`;
+      script.async = true;
+      script.onload = () => setIsLoaded(true);
+      document.body.appendChild(script);
+    } else if (window.google && !isLoaded) {
+      setIsLoaded(true);
+    }
+  }, [isLoaded]);
+
+  useEffect(() => {
+    if (isLoaded && inputRef.current) {
+      const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
+        types: ['address'],
+        componentRestrictions: { country: 'us' },
+        fields: ['formatted_address']
+      });
+
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace() as Place;
+        if (place.formatted_address) {
+          onChange(place.formatted_address);
+        }
+      });
+    }
+  }, [isLoaded, onChange]);
+
+  return (
+    <div>
+      <label htmlFor="address" className="block text-sm font-medium text-gray-700 dark:text-gray-200">
+        {label}
+      </label>
+      <Input
+        ref={inputRef}
+        id="address"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        error={error}
+        className="mt-1"
+      />
+    </div>
+  );
+};
+```
+
+# src/components/ui/ActionButton.tsx
+
+```tsx
+import React from 'react';
+import { Button } from '@/components/ui/Button';
+
+interface ActionButtonProps {
+  onClick: () => void;
+  label: string;
+  variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
+}
+
+export const ActionButton: React.FC<ActionButtonProps> = ({ onClick, label, variant = 'default' }) => (
+  <Button onClick={onClick} variant={variant}>
+    {label}
+  </Button>
+);
+```
+
 # src/app/settings/page.tsx
 
 ```tsx
@@ -3591,6 +3612,14 @@ export default function LoginPage() {
 }
 ```
 
+# src/app/fonts/GeistVF.woff
+
+This is a binary file of the type: Binary
+
+# src/app/fonts/GeistMonoVF.woff
+
+This is a binary file of the type: Binary
+
 # src/app/embed/page.tsx
 
 ```tsx
@@ -3616,14 +3645,6 @@ export default function EmbedPage() {
   );
 }
 ```
-
-# src/app/fonts/GeistVF.woff
-
-This is a binary file of the type: Binary
-
-# src/app/fonts/GeistMonoVF.woff
-
-This is a binary file of the type: Binary
 
 # src/app/customers/page.tsx
 
@@ -4202,10 +4223,11 @@ export async function POST(request: Request) {
 # src/app/api/rental-requests/route.ts
 
 ```ts
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { dbConnect } from '@/lib/mongodb';
 import { RentalRequest, IRentalRequest } from '@/models';
+import { allowedOrigins } from '@/config/cors';
 
 // Define the RentalRequestType
 type RentalRequestType = z.infer<typeof RentalRequestSchema>;
@@ -4231,11 +4253,36 @@ const RentalRequestSchema = z.object({
   installAddress: z.string(),
 });
 
-export async function POST(request: Request) {
+// Updated CORS function
+function setCORSHeaders(req: NextRequest, res: NextResponse): NextResponse {
+  const origin = req.headers.get('origin');
+  
+  if (origin && allowedOrigins.includes(origin)) {
+    res.headers.set('Access-Control-Allow-Origin', origin);
+  } else {
+    // If the origin is not in the list, you might want to deny the request
+    // or set a default origin. Here we're setting it to the first allowed origin.
+    res.headers.set('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+  
+  res.headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.headers.set('Access-Control-Allow-Headers', 'Content-Type');
+  res.headers.set('Access-Control-Allow-Credentials', 'true');
+  return res;
+}
+
+export async function OPTIONS(req: NextRequest) {
+  const res = new NextResponse(null, { status: 200 });
+  return setCORSHeaders(req, res);
+}
+
+export async function POST(req: NextRequest) {
   await dbConnect();
 
   try {
-    const body = await request.json();
+    const body = await req.json();
+    console.log('Received body:', body);
+
     const validatedData = RentalRequestSchema.parse(body);
 
     // Save the validated data to the database
@@ -4243,28 +4290,40 @@ export async function POST(request: Request) {
     await newRentalRequest.save();
 
     const response: ApiResponse<RentalRequestType> = { data: validatedData };
-    return NextResponse.json(response, { status: 201 });
+    const res = NextResponse.json(response, { status: 201 });
+    return setCORSHeaders(req, res);
   } catch (error) {
+    console.error('Error in POST /api/rental-requests:', error);
+    let response: ApiResponse<never>;
+    let status: number;
+
     if (error instanceof z.ZodError) {
-      const response: ApiResponse<never> = { error: JSON.stringify(error.errors) };
-      return NextResponse.json(response, { status: 400 });
+      console.log('Validation errors:', error.errors);
+      response = { error: JSON.stringify(error.errors) };
+      status = 400;
+    } else {
+      response = { error: 'Internal Server Error' };
+      status = 500;
     }
-    const response: ApiResponse<never> = { error: 'Internal Server Error' };
-    return NextResponse.json(response, { status: 500 });
+
+    const res = NextResponse.json(response, { status });
+    return setCORSHeaders(req, res);
   }
 }
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   await dbConnect();
 
   try {
     const rentalRequests = await RentalRequest.find().sort({ createdAt: -1 });
     const response: ApiResponse<IRentalRequest[]> = { data: rentalRequests };
-    return NextResponse.json(response);
+    const res = NextResponse.json(response);
+    return setCORSHeaders(req, res);
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
     const response: ApiResponse<never> = { error: errorMessage };
-    return NextResponse.json(response, { status: 500 });
+    const res = NextResponse.json(response, { status: 500 });
+    return setCORSHeaders(req, res);
   }
 }
 ```
@@ -4273,7 +4332,7 @@ export async function GET() {
 
 ```ts
 import { NextResponse } from 'next/server';
-import clientPromise from '@/lib/mongodb';
+import { clientPromise } from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
@@ -4308,6 +4367,25 @@ export async function POST(request: Request) {
     console.error('Registration error:', error);
     return NextResponse.json({ message: 'An error occurred during registration' }, { status: 500 });
   }
+}
+```
+
+# src/app/api/embed/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+
+export async function GET() {
+  const filePath = path.join(process.cwd(), 'public', 'standalone-form.js');
+  const fileContents = fs.readFileSync(filePath, 'utf8');
+
+  return new NextResponse(fileContents, {
+    headers: {
+      'Content-Type': 'application/javascript',
+    },
+  });
 }
 ```
 
@@ -4362,25 +4440,6 @@ export async function POST(request: Request) {
     const response: ApiResponse<never> = { error: 'Failed to create quote' };
     return NextResponse.json(response, { status: 500 });
   }
-}
-```
-
-# src/app/api/embed/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
-
-export async function GET() {
-  const filePath = path.join(process.cwd(), 'public', 'standalone-form.js');
-  const fileContents = fs.readFileSync(filePath, 'utf8');
-
-  return new NextResponse(fileContents, {
-    headers: {
-      'Content-Type': 'application/javascript',
-    },
-  });
 }
 ```
 
@@ -4641,6 +4700,40 @@ export async function POST(request: Request) {
 }
 ```
 
+# src/app/api/customers/search/route.ts
+
+```ts
+import { NextResponse } from 'next/server';
+import { dbConnect } from '@/lib/mongodb';
+import { Customer } from '@/models';
+
+export async function GET(request: Request) {
+  await dbConnect();
+
+  const { searchParams } = new URL(request.url);
+  const term = searchParams.get('term');
+
+  if (!term) {
+    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
+  }
+
+  try {
+    const customers = await Customer.find({
+      $or: [
+        { firstName: { $regex: term, $options: 'i' } },
+        { lastName: { $regex: term, $options: 'i' } },
+        { email: { $regex: term, $options: 'i' } },
+      ]
+    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
+
+    return NextResponse.json(customers);
+  } catch (error) {
+    console.error('Error searching customers:', error);
+    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
+  }
+}
+```
+
 # src/app/api/customers/[id]/route.ts
 
 ```ts
@@ -4723,40 +4816,6 @@ export async function DELETE(
 }
 ```
 
-# src/app/api/customers/search/route.ts
-
-```ts
-import { NextResponse } from 'next/server';
-import { dbConnect } from '@/lib/mongodb';
-import { Customer } from '@/models';
-
-export async function GET(request: Request) {
-  await dbConnect();
-
-  const { searchParams } = new URL(request.url);
-  const term = searchParams.get('term');
-
-  if (!term) {
-    return NextResponse.json({ error: 'Search term is required' }, { status: 400 });
-  }
-
-  try {
-    const customers = await Customer.find({
-      $or: [
-        { firstName: { $regex: term, $options: 'i' } },
-        { lastName: { $regex: term, $options: 'i' } },
-        { email: { $regex: term, $options: 'i' } },
-      ]
-    }).select('firstName lastName email phoneNumber installAddress mobilityAids').limit(10);
-
-    return NextResponse.json(customers);
-  } catch (error) {
-    console.error('Error searching customers:', error);
-    return NextResponse.json({ error: 'Failed to search customers' }, { status: 500 });
-  }
-}
-```
-
 # src/app/api/auth/[...nextauth]/route.ts
 
 ```ts
@@ -4771,9 +4830,9 @@ export { handler as GET, handler as POST };
 # src/app/api/auth/[...nextauth]/auth.ts
 
 ```ts
+import { clientPromise } from '@/lib/mongodb';
 import { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
-import clientPromise from '@/lib/mongodb';
 import bcrypt from 'bcryptjs';
 
 if (!process.env.NEXTAUTH_SECRET) {
